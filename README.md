@@ -26,12 +26,17 @@ There are already several AI plugins for Obsidian. This one was built around thr
 
 Requires Obsidian 1.8.7 or later.
 
-Not yet in the community plugin list. Until then:
+Yaaiop is not in the community plugin list yet. It has been submitted for review, and this section will be updated once it is approved. Until then, install it one of two ways.
+
+**With [BRAT](https://github.com/TfTHacker/obsidian42-brat)**, which also keeps it updated: add `nicolasassi/yaaiop` as a beta plugin.
+
+**Manually:**
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/nicolasassi/yaaiop/releases).
 2. Put them in `<vault>/.obsidian/plugins/yaaiop/`.
 3. Enable **Yaaiop** in Settings → Community plugins.
-4. Open Settings → Yaaiop and paste your API key. **Test connection** checks it.
+
+Either way, open Settings → Yaaiop and paste your API key. **Test connection** checks it.
 
 For mobile, sync that folder the way you already sync your vault, then enter the key again on the device.
 
