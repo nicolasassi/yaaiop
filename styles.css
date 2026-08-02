@@ -1,0 +1,335 @@
+.yaaiop-root {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.yaaiop-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex: 0 0 auto;
+}
+
+.yaaiop-status {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yaaiop-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  flex: 0 0 auto;
+}
+
+.yaaiop-icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  padding: var(--size-4-1);
+  cursor: pointer;
+}
+
+.yaaiop-icon-button:hover {
+  color: var(--text-normal);
+}
+
+.yaaiop-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--size-4-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-3);
+  -webkit-overflow-scrolling: touch;
+}
+
+.yaaiop-empty {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+
+.yaaiop-empty ul {
+  list-style: none;
+  padding: 0;
+  margin: var(--size-4-2) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+}
+
+.yaaiop-example {
+  width: 100%;
+  text-align: left;
+  background: var(--background-secondary);
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  padding: var(--size-4-2);
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  white-space: normal;
+  height: auto;
+  line-height: 1.4;
+}
+
+.yaaiop-example:hover {
+  color: var(--text-normal);
+}
+
+.yaaiop-msg {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  min-width: 0;
+}
+
+.yaaiop-msg-user {
+  align-items: flex-end;
+}
+
+.yaaiop-msg-user .yaaiop-bubble {
+  background: var(--background-modifier-hover);
+  border-radius: var(--radius-l);
+  padding: var(--size-4-2) var(--size-4-3);
+  max-width: 85%;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.yaaiop-msg-assistant .yaaiop-bubble {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Streamed plain text, before markdown rendering swaps in. */
+.yaaiop-streaming {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.yaaiop-markdown > :first-child {
+  margin-top: 0;
+}
+
+.yaaiop-markdown > :last-child {
+  margin-bottom: 0;
+}
+
+/* Wide content must scroll inside the message, not stretch the sidebar. */
+.yaaiop-markdown pre,
+.yaaiop-markdown table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.yaaiop-thinking {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: var(--size-4-2);
+}
+
+.yaaiop-thinking summary {
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+.yaaiop-thinking-body {
+  white-space: pre-wrap;
+  margin-top: var(--size-4-1);
+  overflow-wrap: anywhere;
+}
+
+.yaaiop-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.yaaiop-tool {
+  display: flex;
+  align-items: baseline;
+  gap: var(--size-4-1);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  min-width: 0;
+}
+
+.yaaiop-tool-icon {
+  display: inline-flex;
+  align-self: center;
+  color: var(--text-faint);
+}
+
+.yaaiop-tool-icon .svg-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.yaaiop-tool-name {
+  font-family: var(--font-monospace);
+  color: var(--text-muted);
+  flex: 0 0 auto;
+}
+
+.yaaiop-tool-detail {
+  color: var(--text-faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yaaiop-notice {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.yaaiop-error {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+  border-radius: var(--radius-s);
+  padding: var(--size-4-2);
+  overflow-wrap: anywhere;
+}
+
+.yaaiop-composer {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: flex-end;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2) var(--size-4-3);
+  padding-bottom: max(var(--size-4-2), env(safe-area-inset-bottom));
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.yaaiop-input {
+  flex: 1 1 auto;
+  resize: none;
+  min-height: 2.4em;
+  max-height: 160px;
+  /* 16px keeps iOS from zooming the viewport when the field takes focus. */
+  font-size: 16px;
+  line-height: 1.4;
+  padding: var(--size-4-2);
+}
+
+.yaaiop-send {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border-radius: var(--radius-m);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  cursor: pointer;
+}
+
+.yaaiop-send:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.yaaiop-send-stop {
+  background: var(--background-modifier-error);
+  color: var(--text-error);
+}
+
+.yaaiop-settings-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-top: var(--size-4-4);
+}
+
+/* --- Saved prompt editor (settings) --- */
+
+.yaaiop-prompt-editor {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 0 var(--size-4-3);
+  margin-bottom: var(--size-4-2);
+}
+
+.yaaiop-prompt-editor .setting-item {
+  border-top: none;
+  padding-top: var(--size-4-2);
+  padding-bottom: var(--size-4-2);
+}
+
+.yaaiop-prompt-textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  font-family: inherit;
+}
+
+/* --- Saved chats modal --- */
+
+.yaaiop-history-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--size-4-1);
+  margin-bottom: var(--size-4-1);
+}
+
+.yaaiop-history-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: left;
+  background: var(--background-secondary);
+  box-shadow: none;
+  border-radius: var(--radius-m);
+  padding: var(--size-4-2) var(--size-4-3);
+  height: auto;
+  cursor: pointer;
+}
+
+.yaaiop-history-open:hover {
+  background: var(--background-modifier-hover);
+}
+
+.yaaiop-history-title {
+  color: var(--text-normal);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.yaaiop-history-meta {
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  margin-top: 2px;
+}
+
+.yaaiop-history-delete {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.yaaiop-history-delete:hover {
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+}

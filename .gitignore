@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output — shipped as release assets, not committed.
+main.js
+*.js.map
+
+# Plugin runtime data (may contain vault content)
+data.json
+sessions.json
+
+# Editor / OS
+.DS_Store
+.idea/
+*.swp
