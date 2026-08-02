@@ -151,7 +151,10 @@ export default class YaaiopPlugin extends Plugin {
 	}
 
 	async loadSettings(): Promise<void> {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		// loadData() is typed `any`; narrow it before merging so unknown or
+		// missing keys fall back to defaults rather than propagating `any`.
+		const stored = (await this.loadData()) as Partial<YaaiopSettings> | null;
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, stored ?? {});
 	}
 
 	async saveSettings(): Promise<void> {

@@ -1,6 +1,6 @@
 import esbuild from "esbuild";
 import process from "process";
-import builtins from "builtin-modules";
+import { builtinModules } from "node:module";
 import fs from "fs";
 import path from "path";
 
@@ -49,7 +49,10 @@ const ctx = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    ...builtins,
+    // Node built-ins, with and without the node: prefix. Nothing here is
+    // reachable in a webview, but esbuild must be told not to bundle them.
+    ...builtinModules,
+    ...builtinModules.map((m) => `node:${m}`),
   ],
   logLevel: "info",
   sourcemap: prod ? false : "inline",

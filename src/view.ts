@@ -104,8 +104,9 @@ export class YaaiopView extends ItemView {
 	}
 
 	private autoGrow(): void {
-		this.inputEl.style.height = "auto";
-		this.inputEl.style.height = `${Math.min(this.inputEl.scrollHeight, 160)}px`;
+		// Measure against auto, then pin to the measured height.
+		this.inputEl.setCssStyles({ height: "auto" });
+		this.inputEl.setCssStyles({ height: `${Math.min(this.inputEl.scrollHeight, 160)}px` });
 	}
 
 	private renderStatus(): void {
@@ -351,10 +352,10 @@ export class YaaiopView extends ItemView {
 		// especially on a phone.
 		const streamEl = body.createDiv({ cls: "yaaiop-streaming" });
 
-		const view = this;
-
+		// Arrow functions below close over `this` lexically, so the returned
+		// handle needs no alias.
 		return {
-			setThinking(text: string) {
+			setThinking: (text: string) => {
 				if (!thinkingEl) {
 					thinkingEl = el.createEl("details", { cls: "yaaiop-thinking" });
 					thinkingEl.createEl("summary", { text: "Thinking" });
@@ -362,10 +363,10 @@ export class YaaiopView extends ItemView {
 					el.insertBefore(thinkingEl, body);
 				}
 				thinkingBody!.setText(text);
-				view.scrollToBottom();
+				this.scrollToBottom();
 			},
 
-			addToolCall(summary: ToolCallSummary) {
+			addToolCall: (summary: ToolCallSummary) => {
 				if (!toolsEl) {
 					toolsEl = el.createDiv({ cls: "yaaiop-tools" });
 					el.insertBefore(toolsEl, body);
@@ -375,27 +376,27 @@ export class YaaiopView extends ItemView {
 				setIcon(icon, TOOL_ICONS[summary.name] ?? "wrench");
 				row.createSpan({ cls: "yaaiop-tool-name", text: summary.name });
 				row.createSpan({ cls: "yaaiop-tool-detail", text: summary.detail });
-				view.scrollToBottom();
+				this.scrollToBottom();
 			},
 
-			setStreamingText(text: string) {
+			setStreamingText: (text: string) => {
 				streamEl.setText(text);
-				view.scrollToBottom();
+				this.scrollToBottom();
 			},
 
-			async finalize(text: string) {
+			finalize: async (text: string) => {
 				streamEl.remove();
 				if (!text.trim()) return;
 				const rendered = body.createDiv({ cls: "yaaiop-markdown" });
-				await MarkdownRenderer.render(view.app, text, rendered, "/", view);
-				view.scrollToBottom();
+				await MarkdownRenderer.render(this.app, text, rendered, "/", this);
+				this.scrollToBottom();
 			},
 
-			addNotice(text: string) {
+			addNotice: (text: string) => {
 				el.createDiv({ cls: "yaaiop-notice", text });
 			},
 
-			addError(text: string) {
+			addError: (text: string) => {
 				el.createDiv({ cls: "yaaiop-error", text: `Error: ${text}` });
 			},
 		};

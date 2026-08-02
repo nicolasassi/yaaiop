@@ -246,7 +246,6 @@ export class YaaiopSettingTab extends PluginSettingTab {
 				s
 					.setLimits(3, 20, 1)
 					.setValue(this.plugin.settings.searchLimit)
-					.setDynamicTooltip()
 					.onChange(async (value) => {
 						this.plugin.settings.searchLimit = value;
 						await this.plugin.saveSettings();
@@ -310,7 +309,6 @@ export class YaaiopSettingTab extends PluginSettingTab {
 					s
 						.setLimits(512, 2576, 128)
 						.setValue(this.plugin.settings.maxImageEdge)
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							this.plugin.settings.maxImageEdge = value;
 							await this.plugin.saveSettings();
@@ -486,7 +484,6 @@ export class YaaiopSettingTab extends PluginSettingTab {
 					s
 						.setLimits(5, 100, 5)
 						.setValue(this.plugin.settings.maxStoredSessions)
-						.setDynamicTooltip()
 						.onChange(async (value) => {
 							this.plugin.settings.maxStoredSessions = value;
 							await this.plugin.saveSettings();

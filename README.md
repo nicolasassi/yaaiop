@@ -1,4 +1,4 @@
-# YAAIOP
+# Yaaiop
 
 Yet Another AI Obsidian Plugin. Chat with an AI model about your notes, on desktop and on your phone.
 
@@ -9,7 +9,7 @@ The plugin is read-only. It can search and read your vault, but it never creates
 There are already several AI plugins for Obsidian. This one was built around three constraints:
 
 - **It has to work on a phone.** The plugin only makes HTTPS calls to a provider API. There is no MCP server to launch, no terminal, no local runtime, and no companion app, so a phone behaves the same as a laptop.
-- **It should reuse Smart Connections, not compete with it.** If you already have that plugin, your vault is already embedded. YAAIOP asks it for search rankings, and falls back to keyword search when it isn't installed.
+- **It should reuse Smart Connections, not compete with it.** If you already have that plugin, your vault is already embedded. Yaaiop asks it for search rankings, and falls back to keyword search when it isn't installed.
 - **A vault is more than markdown.** Images and PDFs are searchable, and the model can open them.
 
 ## Features
@@ -28,8 +28,8 @@ Not yet in the community plugin list. Until then:
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/nicolasassi/yaaiop/releases).
 2. Put them in `<vault>/.obsidian/plugins/yaaiop/`.
-3. Enable **YAAIOP** in Settings → Community plugins.
-4. Open Settings → YAAIOP and paste your API key. **Test connection** checks it.
+3. Enable **Yaaiop** in Settings → Community plugins.
+4. Open Settings → Yaaiop and paste your API key. **Test connection** checks it.
 
 For mobile, sync that folder the way you already sync your vault, then enter the key again on the device.
 

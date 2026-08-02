@@ -110,13 +110,14 @@ export class VaultSearch {
 
 	private smartSources(): SmartSourcesCollection | null {
 		try {
-			// Smart Connections exposes its environment on the plugin instance, and
-			// mirrors it on globalThis. Try both — the global appears only once the
-			// environment has finished loading.
+			// Smart Connections exposes its environment on the plugin instance and
+			// mirrors it on the window. Try both: the window copy only appears once
+			// the environment has finished loading.
 			const plugins = (this.app as unknown as { plugins?: { plugins?: Record<string, unknown> } })
 				.plugins?.plugins;
 			const sc = plugins?.["smart-connections"] as { env?: unknown } | undefined;
-			const env = (sc?.env ?? (globalThis as unknown as { smart_env?: unknown }).smart_env) as
+			// Smart Connections mirrors its environment onto the window object.
+			const env = (sc?.env ?? (window as unknown as { smart_env?: unknown }).smart_env) as
 				| { smart_sources?: SmartSourcesCollection }
 				| undefined;
 			const sources = env?.smart_sources;

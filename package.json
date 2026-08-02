@@ -1,7 +1,7 @@
 {
   "name": "yaaiop",
   "version": "0.1.0",
-  "description": "Yet Another AI Obsidian Plugin \u2014 vault-aware AI chat for Obsidian.",
+  "description": "Yet Another AI Obsidian Plugin — vault-aware AI chat for Obsidian.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -21,7 +21,6 @@
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^26.1.2",
-    "builtin-modules": "^5.3.0",
     "esbuild": "^0.28.1",
     "obsidian": "^1.13.1",
     "typescript": "^7.0.2"
