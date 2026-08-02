@@ -26,8 +26,6 @@ There are already several AI plugins for Obsidian. This one was built around thr
 
 Requires Obsidian 1.8.7 or later.
 
-Yaaiop is not in the community plugin list yet. It has been submitted for review, and this section will be updated once it is approved. Until then, install it one of two ways.
-
 **With [BRAT](https://github.com/TfTHacker/obsidian42-brat)**, which also keeps it updated: add `nicolasassi/yaaiop` as a beta plugin.
 
 **Manually:**
