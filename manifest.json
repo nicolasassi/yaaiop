@@ -1,7 +1,7 @@
 {
   "id": "yaaiop",
   "name": "Yaaiop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.8.7",
   "description": "Chat with an AI model about your vault. API-only and mobile-friendly, with optional Smart Connections semantic search. Read-only.",
   "author": "Nicolas Sassi",
