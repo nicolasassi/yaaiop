@@ -36,11 +36,18 @@ jobs:
             exit 1
           fi
 
-      - name: Create release
+      # Idempotent on purpose. Creating a release in the GitHub UI or via
+      # `gh release create` also creates the tag, which fires this workflow —
+      # so by the time it runs, the release may already exist. Uploading to the
+      # existing release covers that case; creating covers a bare tag push.
+      - name: Publish release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${GITHUB_REF#refs/tags/}" \
-            --title "${GITHUB_REF#refs/tags/}" \
-            --generate-notes \
-            main.js manifest.json styles.css
+          TAG="${GITHUB_REF#refs/tags/}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" main.js manifest.json styles.css --clobber
+          else
+            gh release create "$TAG" --title "$TAG" --generate-notes \
+              main.js manifest.json styles.css
+          fi
