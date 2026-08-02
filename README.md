@@ -24,6 +24,8 @@ There are already several AI plugins for Obsidian. This one was built around thr
 
 ## Installation
 
+Requires Obsidian 1.8.7 or later.
+
 Not yet in the community plugin list. Until then:
 
 1. Download `main.js`, `manifest.json`, and `styles.css` from the [latest release](https://github.com/nicolasassi/yaaiop/releases).
