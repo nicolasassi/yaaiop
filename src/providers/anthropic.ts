@@ -8,6 +8,7 @@ import type {
 	ProviderInfo,
 	StopReason,
 	StreamCallbacks,
+	StructuredRequest,
 	ToolDefinition,
 	ToolResultPart,
 } from "./types";
@@ -16,6 +17,7 @@ export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	id: "anthropic",
 	name: "Anthropic (Claude)",
 	defaultModel: "claude-opus-5",
+	utilityModel: "claude-haiku-4-5",
 	apiKeyUrl: "https://console.anthropic.com/settings/keys",
 	apiKeyPlaceholder: "sk-ant-...",
 	models: [
@@ -136,6 +138,39 @@ export class AnthropicProvider implements ChatProvider {
 			stopReason: toStopReason(message.stop_reason),
 			refusalReason: message.stop_details?.category ?? undefined,
 		};
+	}
+
+	/**
+	 * Forced tool use is how the Messages API guarantees a shape: the model has
+	 * exactly one tool and no choice but to call it, so the arguments it builds
+	 * are the answer. No `thinking` here — utility models are picked for being
+	 * cheap, and the call is not on the user's critical path.
+	 */
+	async structuredCompletion(request: StructuredRequest, signal: AbortSignal): Promise<unknown> {
+		const response = await this.sdk().messages.create(
+			{
+				model: request.model,
+				max_tokens: request.maxTokens,
+				system: request.system,
+				messages: [{ role: "user", content: request.prompt }],
+				tools: [
+					{
+						name: "respond",
+						description: "Return the result. This is the only way to answer.",
+						input_schema: {
+							type: "object" as const,
+							properties: request.schema.properties,
+							required: request.schema.required,
+						},
+					},
+				],
+				tool_choice: { type: "tool", name: "respond" },
+			},
+			{ signal },
+		);
+
+		const call = response.content.find((block) => block.type === "tool_use");
+		return call ? call.input : null;
 	}
 
 	async testConnection(model: string): Promise<void> {

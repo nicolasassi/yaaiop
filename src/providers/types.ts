@@ -109,6 +109,13 @@ export interface ProviderInfo {
 	name: string;
 	models: ModelInfo[];
 	defaultModel: string;
+	/**
+	 * The cheapest model that can follow a short instruction reliably.
+	 *
+	 * Used for background housekeeping the user did not ask for and should not
+	 * pay chat prices for — memory extraction today. Never used to answer.
+	 */
+	utilityModel: string;
 	/** Where the user gets a key, shown in settings. */
 	apiKeyUrl: string;
 	apiKeyPlaceholder: string;
@@ -123,6 +130,19 @@ export interface CompletionRequest {
 	effort: ReasoningEffort;
 	/** When false, adapters should ask the provider not to return reasoning text. */
 	includeReasoning: boolean;
+}
+
+/**
+ * A one-shot request whose answer must be an object matching `schema`, rather
+ * than prose. Used for background work the UI parses instead of displays.
+ */
+export interface StructuredRequest {
+	model: string;
+	system: string;
+	prompt: string;
+	maxTokens: number;
+	/** JSON Schema for the object the model must return. */
+	schema: ToolDefinition["parameters"];
 }
 
 export interface StreamCallbacks {
@@ -155,6 +175,12 @@ export interface ChatProvider {
 		callbacks: StreamCallbacks,
 		signal: AbortSignal,
 	): Promise<CompletionResult>;
+	/**
+	 * One-shot call returning an object shaped like `request.schema`. Adapters
+	 * use whatever their API offers (forced tool use, JSON mode); the caller
+	 * gets parsed JSON and must still treat its contents as untrusted.
+	 */
+	structuredCompletion(request: StructuredRequest, signal: AbortSignal): Promise<unknown>;
 	/** Cheapest possible round-trip, to validate credentials from settings. */
 	testConnection(model: string): Promise<void>;
 }

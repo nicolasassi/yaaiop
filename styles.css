@@ -333,3 +333,147 @@
   color: var(--text-error);
   background: var(--background-modifier-error);
 }
+
+/* --- Memory suggestions --- */
+
+.yaaiop-memory-bar {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--background-modifier-border);
+  padding: var(--size-4-2) var(--size-4-2) 0;
+}
+
+.yaaiop-memory-head {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+
+.yaaiop-memory-toggle {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  padding: var(--size-4-1) 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  text-align: left;
+  cursor: pointer;
+}
+
+.yaaiop-memory-toggle:hover {
+  color: var(--text-normal);
+}
+
+.yaaiop-memory-chevron {
+  display: flex;
+  align-items: center;
+  color: var(--text-faint);
+}
+
+.yaaiop-memory-dismiss {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.yaaiop-memory-dismiss:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+.yaaiop-memory-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-1);
+  padding-bottom: var(--size-4-2);
+  /* Three long suggestions must not eat a phone screen; scroll instead. */
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.yaaiop-memory-body-hidden {
+  display: none;
+}
+
+.yaaiop-memory-suggestion {
+  display: flex;
+  align-items: stretch;
+  gap: var(--size-4-1);
+}
+
+.yaaiop-memory-add {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--size-4-2);
+  padding: var(--size-4-2);
+  height: auto;
+  background: var(--background-secondary);
+  box-shadow: none;
+  border-radius: var(--radius-m);
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  line-height: var(--line-height-tight);
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.yaaiop-memory-add:hover {
+  background: var(--background-modifier-hover);
+}
+
+.yaaiop-memory-add-icon {
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  color: var(--text-accent);
+}
+
+.yaaiop-memory-add-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.yaaiop-memory-skip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.yaaiop-memory-skip:hover {
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+}
+
+/* --- Memory settings --- */
+
+.yaaiop-memory-row {
+  align-items: flex-start;
+}
+
+.yaaiop-memory-textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  font-family: inherit;
+}

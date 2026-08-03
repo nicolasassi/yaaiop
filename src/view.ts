@@ -5,6 +5,7 @@ import { modelInfo, providerInfo, type ChatMessage, type TextPart, type Thinking
 import { SessionHistoryModal } from "./modals";
 import { deriveTitle, newSessionId, type StoredSession } from "./store";
 import { largestFolder, type ToolCallSummary } from "./vault-tools";
+import { MAX_MEMORIES, extractMemories, newMemory } from "./memory";
 
 export const VIEW_TYPE_YAAIOP = "yaaiop-chat-view";
 
@@ -13,11 +14,19 @@ export class YaaiopView extends ItemView {
 	private session: ChatSession;
 
 	private messagesEl!: HTMLElement;
+	private memoryBarEl!: HTMLElement;
 	private inputEl!: HTMLTextAreaElement;
 	private sendButton!: HTMLButtonElement;
 	private statusEl!: HTMLElement;
 
 	private controller: AbortController | null = null;
+	/** Separate from `controller`: extraction outlives the turn that started it. */
+	private memoryController: AbortController | null = null;
+	/**
+	 * Sticky across suggestions. Collapsing is a statement about wanting the
+	 * chat back, not about one particular batch, so the next batch respects it.
+	 */
+	private memoryCollapsed = false;
 
 	private sessionId = newSessionId();
 	private sessionCreatedAt = Date.now();
@@ -66,6 +75,11 @@ export class YaaiopView extends ItemView {
 
 		this.messagesEl = root.createDiv({ cls: "yaaiop-messages" });
 
+		// Sits between the transcript and the composer so it is the last thing
+		// read before typing, and never pushes a streaming answer around.
+		this.memoryBarEl = root.createDiv({ cls: "yaaiop-memory-bar" });
+		this.memoryBarEl.hide();
+
 		const composer = root.createDiv({ cls: "yaaiop-composer" });
 		this.inputEl = composer.createEl("textarea", {
 			cls: "yaaiop-input",
@@ -101,6 +115,7 @@ export class YaaiopView extends ItemView {
 
 	async onClose(): Promise<void> {
 		this.controller?.abort();
+		this.memoryController?.abort();
 	}
 
 	private autoGrow(): void {
@@ -163,6 +178,7 @@ export class YaaiopView extends ItemView {
 
 	newChat(): void {
 		this.controller?.abort();
+		this.clearMemorySuggestions();
 		this.session.reset();
 		this.sessionId = newSessionId();
 		this.sessionCreatedAt = Date.now();
@@ -187,6 +203,7 @@ export class YaaiopView extends ItemView {
 	/** Replaces the current conversation with a stored one and re-renders it. */
 	openSession(stored: StoredSession): void {
 		this.controller?.abort();
+		this.clearMemorySuggestions();
 		this.session.restore(stored.messages);
 		this.sessionId = stored.id;
 		this.sessionCreatedAt = stored.createdAt;
@@ -285,6 +302,9 @@ export class YaaiopView extends ItemView {
 		}
 
 		this.messagesEl.querySelector(".yaaiop-empty")?.remove();
+		// Last turn's suggestions are about last turn. Asking a new question is
+		// as good as dismissing them.
+		this.clearMemorySuggestions();
 		if (preset === undefined) this.inputEl.value = "";
 		this.autoGrow();
 
@@ -296,6 +316,7 @@ export class YaaiopView extends ItemView {
 
 		let thinkingText = "";
 		let answerText = "";
+		let completed = false;
 
 		try {
 			await this.session.send(
@@ -314,6 +335,7 @@ export class YaaiopView extends ItemView {
 				this.controller.signal,
 			);
 			await assistant.finalize(answerText);
+			completed = true;
 		} catch (err) {
 			const message = (err as Error).message ?? String(err);
 			if (this.controller.signal.aborted) {
@@ -331,6 +353,137 @@ export class YaaiopView extends ItemView {
 			// half-finished conversation is still worth being able to reopen.
 			await this.persistSession();
 		}
+
+		// Only a turn that ran to a real answer is worth reading for memories,
+		// and it is deliberately not awaited: it must not delay the composer.
+		if (completed) void this.suggestMemories(text, answerText);
+	}
+
+	/**
+	 * Looks at the finished exchange and offers anything worth keeping.
+	 *
+	 * Every failure here is swallowed to the console. This is a side feature the
+	 * user did not ask for on this particular turn — a rate limit or a bad
+	 * response from it must never surface as an error over a good answer.
+	 */
+	private async suggestMemories(userText: string, answerText: string): Promise<void> {
+		const settings = this.plugin.settings;
+		if (!settings.memoryEnabled) return;
+		if (settings.memories.length >= MAX_MEMORIES) return;
+		if (!answerText.trim()) return;
+
+		this.memoryController?.abort();
+		const controller = new AbortController();
+		this.memoryController = controller;
+
+		try {
+			const candidates = await extractMemories(
+				this.plugin.provider(),
+				userText,
+				answerText,
+				settings.memories,
+				controller.signal,
+			);
+			if (controller.signal.aborted) return;
+			if (candidates.length > 0) this.renderMemorySuggestions(candidates);
+		} catch (err) {
+			if (!controller.signal.aborted) {
+				console.error("[yaaiop] could not check for memories:", err);
+			}
+		} finally {
+			if (this.memoryController === controller) this.memoryController = null;
+		}
+	}
+
+	private clearMemorySuggestions(): void {
+		this.memoryController?.abort();
+		this.memoryController = null;
+		this.memoryBarEl.empty();
+		this.memoryBarEl.hide();
+	}
+
+	/**
+	 * The suggestion strip. Collapsed it is a single line naming the count, so
+	 * the chat stays the focus; expanded, each candidate can be kept or skipped
+	 * on its own. Nothing is written until something is tapped.
+	 */
+	private renderMemorySuggestions(candidates: string[]): void {
+		const bar = this.memoryBarEl;
+		bar.empty();
+		bar.show();
+
+		const remaining = new Set(candidates);
+
+		const head = bar.createDiv({ cls: "yaaiop-memory-head" });
+
+		const toggle = head.createEl("button", { cls: "yaaiop-memory-toggle" });
+		const chevron = toggle.createSpan({ cls: "yaaiop-memory-chevron" });
+		const label = toggle.createSpan({ cls: "yaaiop-memory-label" });
+
+		const dismiss = head.createEl("button", {
+			cls: "yaaiop-memory-dismiss",
+			attr: { "aria-label": "Dismiss suggestions" },
+		});
+		setIcon(dismiss, "x");
+		dismiss.onclick = () => this.clearMemorySuggestions();
+
+		const body = bar.createDiv({ cls: "yaaiop-memory-body" });
+
+		const applyCollapsed = () => {
+			setIcon(chevron, this.memoryCollapsed ? "chevron-right" : "chevron-down");
+			label.setText(
+				this.memoryCollapsed
+					? `Add to memory? (${remaining.size})`
+					: "Add to memory?",
+			);
+			toggle.setAttribute("aria-expanded", String(!this.memoryCollapsed));
+			body.toggleClass("yaaiop-memory-body-hidden", this.memoryCollapsed);
+		};
+
+		toggle.onclick = () => {
+			this.memoryCollapsed = !this.memoryCollapsed;
+			applyCollapsed();
+		};
+
+		const drop = (text: string, row: HTMLElement) => {
+			remaining.delete(text);
+			row.remove();
+			if (remaining.size === 0) this.clearMemorySuggestions();
+			else applyCollapsed();
+		};
+
+		for (const text of candidates) {
+			const row = body.createDiv({ cls: "yaaiop-memory-suggestion" });
+
+			const add = row.createEl("button", {
+				cls: "yaaiop-memory-add",
+				attr: { "aria-label": `Remember: ${text}` },
+			});
+			const icon = add.createSpan({ cls: "yaaiop-memory-add-icon" });
+			setIcon(icon, "plus");
+			add.createSpan({ cls: "yaaiop-memory-add-text", text });
+			add.onclick = () => void this.keepMemory(text, () => drop(text, row));
+
+			const skip = row.createEl("button", {
+				cls: "yaaiop-memory-skip",
+				attr: { "aria-label": "Skip this one" },
+			});
+			setIcon(skip, "x");
+			skip.onclick = () => drop(text, row);
+		}
+
+		applyCollapsed();
+	}
+
+	private async keepMemory(text: string, onKept: () => void): Promise<void> {
+		const settings = this.plugin.settings;
+		if (settings.memories.length >= MAX_MEMORIES) {
+			new Notice(`YAAIOP: memory is full (${MAX_MEMORIES}). Delete some in settings.`);
+			return;
+		}
+		settings.memories.push(newMemory(text));
+		await this.plugin.saveSettings();
+		onKept();
 	}
 
 	private addUserMessage(text: string): void {

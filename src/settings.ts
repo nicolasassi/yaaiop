@@ -2,6 +2,7 @@ import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import type YaaiopPlugin from "./main";
 import { claudeMdExists } from "./vault-tools";
 import { newSessionId } from "./store";
+import { MAX_MEMORIES, type Memory } from "./memory";
 import {
 	DEFAULT_PROVIDER_ID,
 	PROVIDERS,
@@ -43,6 +44,10 @@ export interface YaaiopSettings {
 	savedPrompts: SavedPrompt[];
 	persistSessions: boolean;
 	maxStoredSessions: number;
+	/** When off, nothing is suggested and kept memories are not sent. */
+	memoryEnabled: boolean;
+	/** Kept memories, in the order they were added. Injected on every message. */
+	memories: Memory[];
 }
 
 export const DEFAULT_SETTINGS: YaaiopSettings = {
@@ -64,6 +69,10 @@ export const DEFAULT_SETTINGS: YaaiopSettings = {
 	savedPrompts: [],
 	persistSessions: true,
 	maxStoredSessions: 25,
+	// Off by default: it spends tokens the user did not ask to spend, on every
+	// message, and a feature that quietly costs money should be opted into.
+	memoryEnabled: false,
+	memories: [],
 };
 
 /**
@@ -372,6 +381,7 @@ export class YaaiopSettingTab extends PluginSettingTab {
 			});
 
 		this.renderSavedPrompts(containerEl);
+		this.renderMemorySettings(containerEl);
 		this.renderHistorySettings(containerEl);
 
 		containerEl.createEl("p", {
@@ -457,6 +467,87 @@ export class YaaiopSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					});
 			});
+		}
+	}
+
+	private renderMemorySettings(containerEl: HTMLElement): void {
+		const { memories, memoryEnabled } = this.plugin.settings;
+
+		new Setting(containerEl).setName("Memory").setHeading();
+
+		new Setting(containerEl)
+			.setName("Remember things between chats")
+			.setDesc(
+				"Suggests things worth keeping after each reply. Nothing is kept unless you tap it.",
+			)
+			.addToggle((t) =>
+				t.setValue(memoryEnabled).onChange(async (value) => {
+					this.plugin.settings.memoryEnabled = value;
+					await this.plugin.saveSettings();
+					this.display();
+				}),
+			);
+
+		if (memoryEnabled) {
+			// Named plainly rather than hidden behind a word like "may" — the cost
+			// is the whole reason this is a setting.
+			containerEl.createEl("p", {
+				text: "Costs tokens: memories are re-sent with every message, and each reply triggers one extra request to a small model.",
+				cls: "yaaiop-settings-note",
+			});
+		}
+
+		if (memories.length === 0) {
+			containerEl.createEl("p", {
+				text: memoryEnabled
+					? "Nothing kept yet. Suggestions appear under the chat."
+					: "Nothing kept.",
+				cls: "yaaiop-settings-note",
+			});
+			return;
+		}
+
+		new Setting(containerEl)
+			.setName("Kept memories")
+			.setDesc(
+				memories.length >= MAX_MEMORIES
+					? `${memories.length} of ${MAX_MEMORIES} — full. Delete one to keep anything new.`
+					: `${memories.length} of ${MAX_MEMORIES}. The model is sent exactly what you see here.`,
+			)
+			.addButton((btn) =>
+				btn
+					.setButtonText("Delete all")
+					.setWarning()
+					.onClick(async () => {
+						this.plugin.settings.memories = [];
+						await this.plugin.saveSettings();
+						new Notice("YAAIOP: memories deleted.");
+						this.display();
+					}),
+			);
+
+		for (const [index, memory] of memories.entries()) {
+			const row = new Setting(containerEl).setClass("yaaiop-memory-row");
+
+			row.addTextArea((ta) => {
+				ta.inputEl.rows = 2;
+				ta.inputEl.addClass("yaaiop-memory-textarea");
+				ta.setValue(memory.text).onChange(async (value) => {
+					memory.text = value;
+					await this.plugin.saveSettings();
+				});
+			});
+
+			row.addExtraButton((btn) =>
+				btn
+					.setIcon("trash")
+					.setTooltip("Delete this memory")
+					.onClick(async () => {
+						this.plugin.settings.memories.splice(index, 1);
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
 		}
 	}
 

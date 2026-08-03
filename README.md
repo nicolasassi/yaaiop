@@ -18,6 +18,7 @@ There are already several AI plugins for Obsidian. This one was built around thr
 - The model searches your vault and opens notes on its own, then answers with `[[wikilinks]]` you can tap.
 - Reads images and PDFs, and finds them through the text of the notes that embed them.
 - Saved prompts for conversations you start often.
+- Memory: it suggests things worth carrying between chats, you tap the ones to keep. Off by default.
 - Chat history, so you can reopen past conversations. Can be turned off.
 - Picks up a `CLAUDE.md` from your vault if you have one.
 - Model picker with a reasoning effort dial.
@@ -55,6 +56,16 @@ Other commands: **New chat**, **Start chat from saved prompt**, **Open a saved c
 
 Attachments are also matched on the text around them, since a filename like `IMG-20260730-WA0071.jpg` says nothing on its own. Images are downscaled before being sent, to keep requests small.
 
+### Memory
+
+Off by default. Turn it on in **Settings → Yaaiop → Memory**.
+
+After each reply, a small model checks whether anything is worth knowing next time — how a folder is organised, how you want answers written, a fact you'd otherwise repeat. Suggestions appear under the chat as **Add to memory?**; tap one to keep it, ✕ to skip, or collapse the strip to get out of the way. Nothing is kept unless you tap it.
+
+Kept memories work like `CLAUDE.md` — added to the system prompt on every message, in every chat. Edit or delete them in settings, up to 50.
+
+**It costs tokens on every call**, which is why it ships off: memories are re-sent with every message, and each reply triggers one extra request. They live in the plugin's `data.json` with your other settings, never in your notes.
+
 ### Settings worth knowing
 
 - **Model** and **Reasoning effort** control cost and answer quality.
@@ -77,9 +88,9 @@ Local storage is not encrypted. Anything with access to your Obsidian profile ca
 
 The plugin sends requests to the API of the provider you configure, and to nothing else. With the default Anthropic provider that is `https://api.anthropic.com/v1/messages`. There is no analytics, no telemetry, and no server operated by this plugin.
 
-Requests happen when you send a message, and when you press **Test connection**.
+Requests happen when you send a message, when you press **Test connection**, and — if memory is enabled — once after each reply, to work out what to suggest remembering.
 
-Each request includes your message, the conversation so far, your vault's folder names and file counts, your extra instructions, your `CLAUDE.md` if enabled, and the contents of any file the model opens. If a vault holds material you don't want sent to a model provider, don't point the plugin at it, and check your provider's data retention policy first.
+Each request includes your message, the conversation so far, your vault's folder names and file counts, your extra instructions, your `CLAUDE.md` if enabled, your kept memories, and the contents of any file the model opens. The memory request is narrower: it sends only the last exchange and the memories you have already kept, never the vault. If a vault holds material you don't want sent to a model provider, don't point the plugin at it, and check your provider's data retention policy first.
 
 Smart Connections runs locally, and is only asked for rankings in-process.
 

@@ -8,6 +8,7 @@ import {
 	type ToolCallSummary,
 } from "./vault-tools";
 import type { YaaiopSettings } from "./settings";
+import { memoriesSection } from "./memory";
 import {
 	modelInfo,
 	type ChatMessage,
@@ -81,6 +82,14 @@ async function buildSystemPrompt(
 	const extra = settings.extraInstructions.trim();
 	if (extra) {
 		sections.push(`The user's own notes on their vault conventions:\n${extra}`);
+	}
+
+	// Memories go last on purpose. This is the only section that changes as the
+	// user taps a suggestion mid-conversation, so keeping it at the tail means a
+	// new memory invalidates the end of the cached prefix rather than all of it.
+	if (settings.memoryEnabled) {
+		const memories = memoriesSection(settings.memories);
+		if (memories) sections.push(memories);
 	}
 
 	return sections.join("\n\n");
