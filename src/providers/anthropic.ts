@@ -268,9 +268,10 @@ function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] 
 		// Reasoning must lead the assistant turn and be replayed exactly as the
 		// API produced it — signature included — so the stored original is used
 		// and anything without one is dropped rather than reconstructed.
+		// Blocks saved by another provider are shaped differently and are skipped.
 		for (const part of message.parts) {
-			if (part.type === "thinking" && part.raw) {
-				content.push(part.raw as Anthropic.ContentBlockParam);
+			if (part.type === "thinking" && isThinkingBlock(part.raw)) {
+				content.push(part.raw);
 			}
 		}
 		for (const part of message.parts) {
@@ -282,6 +283,19 @@ function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] 
 		}
 		return { role: "assistant", content };
 	});
+}
+
+/**
+ * Saved chats are replayed from disk and can predate a provider switch, so the
+ * opaque block on a thinking part is checked before being handed back to the API
+ * rather than trusted to be ours.
+ */
+function isThinkingBlock(
+	raw: unknown,
+): raw is Anthropic.ThinkingBlockParam | Anthropic.RedactedThinkingBlockParam {
+	if (typeof raw !== "object" || raw === null) return false;
+	const type = (raw as { type?: unknown }).type;
+	return type === "thinking" || type === "redacted_thinking";
 }
 
 function fromAnthropicContent(content: Anthropic.ContentBlock[]): ChatPart[] {

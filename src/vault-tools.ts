@@ -446,10 +446,11 @@ export function formatToday(now = new Date()): string {
 }
 
 /**
- * Reads the vault's CLAUDE.md (or whatever path the user configured), if present.
+ * Reads the note the user pointed at for standing instructions — CLAUDE.md by
+ * default, but nothing here cares about the name.
  * Returns null when the toggle is off, the path is blank, or no such note exists.
  */
-export async function loadClaudeMd(
+export async function loadInstructionsFile(
 	app: App,
 	path: string,
 	maxChars: number,
@@ -471,8 +472,8 @@ export async function loadClaudeMd(
 	}
 }
 
-/** Whether a CLAUDE.md exists at the configured path — used to label the setting. */
-export function claudeMdExists(app: App, path: string): boolean {
+/** Whether a note exists at the configured path — used to label the setting. */
+export function instructionsFileExists(app: App, path: string): boolean {
 	const trimmed = path.trim();
 	return trimmed ? resolveFile(app, trimmed) !== null : false;
 }

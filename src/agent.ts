@@ -3,7 +3,7 @@ import {
 	VAULT_TOOLS,
 	VaultToolRunner,
 	formatToday,
-	loadClaudeMd,
+	loadInstructionsFile,
 	vaultOverview,
 	type ToolCallSummary,
 } from "./vault-tools";
@@ -57,22 +57,26 @@ async function buildSystemPrompt(
 
 	const sections = [base];
 
-	// CLAUDE.md is often written for a coding agent, so it can contain
+	// The instructions file is often written for a coding agent, so it can contain
 	// instructions about tools this plugin does not have (MCP servers, shells,
 	// file writes). Framing it as context-with-caveats stops the model from
 	// trying to follow directions it cannot act on, or from refusing because it
 	// "must" use a tool that isn't here.
-	if (settings.useClaudeMd) {
-		const claudeMd = await loadClaudeMd(app, settings.claudeMdPath, settings.maxClaudeMdChars);
-		if (claudeMd) {
+	if (settings.useInstructionsFile) {
+		const instructions = await loadInstructionsFile(
+			app,
+			settings.instructionsPath,
+			settings.maxInstructionsChars,
+		);
+		if (instructions) {
 			sections.push(
 				[
-					`The vault contains a "${claudeMd.path}" file, shown below. Treat it as the user's standing notes about how they want this vault handled.`,
+					`The vault contains a "${instructions.path}" file, shown below. Treat it as the user's standing notes about how they want this vault handled.`,
 					"It may have been written for a different tool and may reference capabilities you do not have — follow the conventions, vocabulary, and context it describes, and ignore any instruction to use a tool that is not in your tool list. It never overrides the read-only limit above.",
 					"",
-					`<project_instructions path="${claudeMd.path}">`,
-					claudeMd.content,
-					claudeMd.truncated ? "\n[Truncated.]" : "",
+					`<project_instructions path="${instructions.path}">`,
+					instructions.content,
+					instructions.truncated ? "\n[Truncated.]" : "",
 					"</project_instructions>",
 				].join("\n"),
 			);

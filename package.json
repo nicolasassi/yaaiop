@@ -1,6 +1,6 @@
 {
   "name": "yaaiop",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Yet Another AI Obsidian Plugin — vault-aware AI chat for Obsidian.",
   "main": "main.js",
   "scripts": {
@@ -15,7 +15,11 @@
     "ai",
     "llm",
     "anthropic",
-    "claude"
+    "claude",
+    "openai",
+    "gpt",
+    "gemini",
+    "openrouter"
   ],
   "author": "Nicolas Sassi",
   "license": "MIT",
@@ -26,6 +30,8 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0"
+    "@anthropic-ai/sdk": "^0.115.0",
+    "@google/genai": "^2.15.0",
+    "openai": "^7.4.0"
   }
 }

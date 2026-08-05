@@ -1,5 +1,8 @@
 import type { ChatProvider, ProviderInfo } from "./types";
 import { ANTHROPIC_PROVIDER, AnthropicProvider } from "./anthropic";
+import { OPENAI_PROVIDER, OpenAIProvider } from "./openai";
+import { GOOGLE_PROVIDER, GoogleProvider } from "./google";
+import { OPENROUTER_PROVIDER, OpenRouterProvider } from "./openrouter";
 
 export * from "./types";
 
@@ -19,6 +22,18 @@ export const PROVIDERS: ProviderRegistration[] = [
 	{
 		info: ANTHROPIC_PROVIDER,
 		create: (getApiKey) => new AnthropicProvider(getApiKey),
+	},
+	{
+		info: OPENAI_PROVIDER,
+		create: (getApiKey) => new OpenAIProvider(getApiKey),
+	},
+	{
+		info: GOOGLE_PROVIDER,
+		create: (getApiKey) => new GoogleProvider(getApiKey),
+	},
+	{
+		info: OPENROUTER_PROVIDER,
+		create: (getApiKey) => new OpenRouterProvider(getApiKey),
 	},
 ];
 

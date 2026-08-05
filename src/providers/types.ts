@@ -34,6 +34,14 @@ export interface ToolCallPart {
 	id: string;
 	name: string;
 	input: Record<string, unknown>;
+	/**
+	 * Provider state that has to travel back with the call, kept verbatim.
+	 *
+	 * Same contract as `ThinkingPart.raw`, on a different part: Gemini attaches
+	 * its thought signature to the tool call rather than to the reasoning before
+	 * it, and rejects the next turn if it comes back without one. Treat as opaque.
+	 */
+	raw?: unknown;
 }
 
 /**

@@ -257,28 +257,6 @@
   margin-top: var(--size-4-4);
 }
 
-/* --- Saved prompt editor (settings) --- */
-
-.yaaiop-prompt-editor {
-  border: 1px solid var(--background-modifier-border);
-  border-radius: var(--radius-m);
-  padding: 0 var(--size-4-3);
-  margin-bottom: var(--size-4-2);
-}
-
-.yaaiop-prompt-editor .setting-item {
-  border-top: none;
-  padding-top: var(--size-4-2);
-  padding-bottom: var(--size-4-2);
-}
-
-.yaaiop-prompt-textarea {
-  width: 100%;
-  min-width: 0;
-  resize: vertical;
-  font-family: inherit;
-}
-
 /* --- Saved chats modal --- */
 
 .yaaiop-history-row {
@@ -463,17 +441,4 @@
 .yaaiop-memory-skip:hover {
   color: var(--text-normal);
   background: var(--background-modifier-hover);
-}
-
-/* --- Memory settings --- */
-
-.yaaiop-memory-row {
-  align-items: flex-start;
-}
-
-.yaaiop-memory-textarea {
-  width: 100%;
-  min-width: 0;
-  resize: vertical;
-  font-family: inherit;
 }

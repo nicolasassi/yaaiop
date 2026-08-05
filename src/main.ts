@@ -3,6 +3,7 @@ import {
 	DEFAULT_SETTINGS,
 	YaaiopSettingTab,
 	loadApiKey,
+	migrateSettings,
 	type YaaiopSettings,
 } from "./settings";
 import { VaultSearch } from "./search";
@@ -154,7 +155,7 @@ export default class YaaiopPlugin extends Plugin {
 		// loadData() is typed `any`; narrow it before merging so unknown or
 		// missing keys fall back to defaults rather than propagating `any`.
 		const stored = (await this.loadData()) as Partial<YaaiopSettings> | null;
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, stored ?? {});
+		this.settings = Object.assign({}, DEFAULT_SETTINGS, migrateSettings(stored ?? {}));
 	}
 
 	async saveSettings(): Promise<void> {

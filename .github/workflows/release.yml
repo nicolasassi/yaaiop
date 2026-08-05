@@ -10,6 +10,10 @@ on:
 
 permissions:
   contents: write
+  # Both are required by actions/attest-build-provenance: id-token to get the
+  # OIDC token that proves the build ran here, attestations to record it.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -26,6 +30,16 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Lets anyone verify the assets were built from this repo, by this
+      # workflow, with `gh attestation verify main.js -R <owner>/<repo>`.
+      # Only the built files are attested; manifest.json ships as committed.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: |
+            main.js
+            styles.css
 
       - name: Verify tag matches manifest version
         run: |
