@@ -9,6 +9,8 @@ import {
 } from "./vault-tools";
 import type { YaaiopSettings } from "./settings";
 import { memoriesSection } from "./memory";
+import { MAX_NOTES_PER_TURN, WRITE_TOOLS, WriteTurn } from "./write-tools";
+import { REVIEW_STATUS_TAG, hasProposals, takeOutcome } from "./proposals";
 import {
 	modelInfo,
 	type ChatMessage,
@@ -38,7 +40,9 @@ async function buildSystemPrompt(
 		`Vault: ${vaultOverview(app)}`,
 		`Today is ${today}.`,
 		"",
-		"You have read-only tools over the vault. You cannot create, edit, or delete notes — if the user asks for a change, explain what you would change and let them make it.",
+		...(settings.allowEdits ? editingRules() : [
+			"You have read-only tools over the vault. You cannot create, edit, or delete notes — if the user asks for a change, explain what you would change and let them make it.",
+		]),
 		"",
 		semantic
 			? "search_vault uses semantic (embedding) search, so descriptive natural-language queries work better than keywords."
@@ -72,7 +76,7 @@ async function buildSystemPrompt(
 			sections.push(
 				[
 					`The vault contains a "${instructions.path}" file, shown below. Treat it as the user's standing notes about how they want this vault handled.`,
-					"It may have been written for a different tool and may reference capabilities you do not have — follow the conventions, vocabulary, and context it describes, and ignore any instruction to use a tool that is not in your tool list. It never overrides the read-only limit above.",
+					`It may have been written for a different tool and may reference capabilities you do not have — follow the conventions, vocabulary, and context it describes, and ignore any instruction to use a tool that is not in your tool list. It never overrides the ${settings.allowEdits ? "editing limits" : "read-only limit"} above.`,
 					"",
 					`<project_instructions path="${instructions.path}">`,
 					instructions.content,
@@ -100,11 +104,28 @@ async function buildSystemPrompt(
 }
 
 /**
+ * Written for a phone: the user drops in a fact or asks for a note, and the
+ * change should be small enough to review on that screen.
+ */
+function editingRules(): string[] {
+	return [
+		"You can make small changes to the vault: create_note, edit_note, append_to_note, and set_properties.",
+		"- Use them only when the user asks you to record, add, or change something. Answering a question never needs a write.",
+		`- Keep it small: at most ${MAX_NOTES_PER_TURN} notes per reply, and targeted changes rather than rewrites. Never reorganise, restructure, or bulk-update notes — if the request needs that, describe the change in chat instead.`,
+		"- edit_note and append_to_note do not change the note directly. They write the old and new text into the note between %% yaaiop:old/new/end %% markers, and the user accepts, adjusts, or rejects them there. Say the change is waiting for their review, with a [[wikilink]] — never that it is done.",
+		"- create_note and set_properties apply immediately. set_properties returns the previous values; if the user asks to undo, set them back.",
+		"- Match the vault's existing conventions: read a similar note first when unsure of the format, folder, or naming.",
+	];
+}
+
+/**
  * The conversation engine. Provider-agnostic: it drives whatever ChatProvider it
  * is handed and never touches a vendor SDK.
  */
 export class ChatSession {
 	private messages: ChatMessage[] = [];
+	/** Notes this chat left proposals in, not yet reported back to the model. */
+	private awaitingReview = new Set<string>();
 
 	constructor(
 		private app: App,
@@ -116,6 +137,7 @@ export class ChatSession {
 
 	reset(): void {
 		this.messages = [];
+		this.awaitingReview.clear();
 	}
 
 	get isEmpty(): boolean {
@@ -134,6 +156,7 @@ export class ChatSession {
 	 */
 	restore(messages: ChatMessage[]): void {
 		this.messages = messages;
+		this.awaitingReview.clear();
 	}
 
 	/**
@@ -149,7 +172,18 @@ export class ChatSession {
 		// the prompt prefix between rounds and cost us the cache hit.
 		const system = await buildSystemPrompt(this.app, settings, this.semanticAvailable());
 
-		this.messages.push({ role: "user", parts: [{ type: "text", text: userText }] });
+		// A proposal tool returns before the user has looked at it, so the model
+		// otherwise never learns whether its text went in.
+		const review = await this.reviewStatus();
+		this.messages.push({
+			role: "user",
+			parts: review
+				? [{ type: "text", text: review }, { type: "text", text: userText }]
+				: [{ type: "text", text: userText }],
+		});
+
+		const turn = new WriteTurn();
+		const tools = settings.allowEdits ? [...VAULT_TOOLS, ...WRITE_TOOLS] : VAULT_TOOLS;
 
 		for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
 			const result = await provider.streamCompletion(
@@ -157,7 +191,7 @@ export class ChatSession {
 					model: settings.model,
 					system,
 					messages: this.messages,
-					tools: VAULT_TOOLS,
+					tools,
 					maxTokens: settings.maxTokens,
 					effort: settings.effort,
 					includeReasoning: settings.showThinking && model.supportsReasoning,
@@ -194,6 +228,7 @@ export class ChatSession {
 					const { content, isError, summary, media } = await this.tools.run(
 						call.name,
 						call.input,
+						turn,
 					);
 					handlers.onToolCall(summary);
 					return { type: "tool_result", toolCallId: call.id, content, isError, media };
@@ -201,10 +236,36 @@ export class ChatSession {
 			);
 
 			this.messages.push({ role: "user", parts: results });
+			for (const path of turn.proposed) this.awaitingReview.add(path);
 		}
 
 		handlers.onText(
 			`\n\n_[Stopped after ${MAX_TOOL_ROUNDS} tool rounds without a final answer.]_`,
 		);
+	}
+
+	/**
+	 * One line per note that had proposals, saying whether they are still open.
+	 * Notes that are still open stay tracked; settled ones are reported once.
+	 */
+	private async reviewStatus(): Promise<string | null> {
+		if (this.awaitingReview.size === 0) return null;
+		const lines: string[] = [];
+		for (const path of [...this.awaitingReview]) {
+			const file = this.app.vault.getFileByPath(path);
+			if (!file) {
+				lines.push(`- ${path}: no longer exists (moved or deleted).`);
+				this.awaitingReview.delete(path);
+				continue;
+			}
+			if (hasProposals(await this.app.vault.cachedRead(file))) {
+				lines.push(`- [[${path}]]: still waiting for review.`);
+				continue;
+			}
+			const outcome = takeOutcome(path);
+			lines.push(`- [[${path}]]: reviewed — the user ${outcome ?? "resolved the proposals by hand"}. Read the note if you need its current text.`);
+			this.awaitingReview.delete(path);
+		}
+		return `${REVIEW_STATUS_TAG}\nStatus of your earlier proposed changes:\n${lines.join("\n")}\n</review_status>`;
 	}
 }

@@ -3,6 +3,8 @@ import { VaultSearch, attachmentContext, referencingNotes, resolveFile } from ".
 import { classifyFile, describeKind, isReadableAsText, loadMedia, type FileKind } from "./files";
 import type { YaaiopSettings } from "./settings";
 import type { MediaAttachment, MediaCapabilities, ToolDefinition } from "./providers";
+import { NoteWriter, WRITE_TOOL_NAMES, type WriteTurn } from "./write-tools";
+import { hasProposals } from "./proposals";
 
 export { resolveFile };
 
@@ -11,7 +13,8 @@ type KindFilter = (typeof KIND_VALUES)[number];
 
 /**
  * Every tool here is read-only by construction: nothing in this file calls
- * vault.create/modify/delete/rename. Write support is a deliberate later step.
+ * vault.create/modify/delete/rename. Writing lives in write-tools.ts, behind a
+ * setting, so turning it off leaves exactly this list.
  */
 export const VAULT_TOOLS: ToolDefinition[] = [
 	{
@@ -109,6 +112,8 @@ export const VAULT_TOOLS: ToolDefinition[] = [
 export interface ToolCallSummary {
 	name: string;
 	detail: string;
+	/** A note the row should open when tapped — set by the write tools. */
+	link?: string;
 }
 
 export interface ToolOutcome {
@@ -120,20 +125,36 @@ export interface ToolOutcome {
 }
 
 export class VaultToolRunner {
+	private writer: NoteWriter;
+
 	constructor(
 		private app: App,
 		private search: VaultSearch,
 		private getSettings: () => YaaiopSettings,
 		private getCapabilities: () => MediaCapabilities,
-	) {}
+	) {
+		this.writer = new NoteWriter(app);
+	}
 
 	/**
 	 * Executes one tool call. Errors are returned as text rather than thrown:
 	 * the model recovers far better from "no file at that path" than from a
 	 * dropped turn, and the caller marks the result with is_error.
 	 */
-	async run(name: string, input: Record<string, unknown>): Promise<ToolOutcome> {
+	async run(name: string, input: Record<string, unknown>, turn: WriteTurn): Promise<ToolOutcome> {
 		try {
+			if (WRITE_TOOL_NAMES.has(name)) {
+				// Checked here as well as by leaving the tools out of the request: a
+				// reopened chat can hold write calls from before the setting was off.
+				if (!this.getSettings().allowEdits) {
+					return {
+						content: "Editing notes is turned off in the plugin's settings. Describe the change and let the user make it.",
+						isError: true,
+						summary: { name, detail: "editing is off" },
+					};
+				}
+				return await this.writer.run(name, input, turn);
+			}
 			switch (name) {
 				case "search_vault":
 					return await this.searchVault(input);
@@ -233,9 +254,13 @@ export class VaultToolRunner {
 				truncated = true;
 			}
 			const header = `# ${file.path}\n(${describeKind(kind)}, modified ${formatDate(file.stat.mtime)})\n\n`;
-			const footer = truncated
-				? `\n\n[Truncated at ${settings.maxNoteChars} characters of ${file.stat.size} bytes.]`
-				: "";
+			const footer =
+				(truncated
+					? `\n\n[Truncated at ${settings.maxNoteChars} characters of ${file.stat.size} bytes.]`
+					: "") +
+				(hasProposals(content)
+					? "\n\n[This note has proposed changes waiting for the user's review, between %% yaaiop:old/new/end %% markers. Treat the old text as current until they accept.]"
+					: "");
 			return {
 				content: header + content + footer,
 				isError: false,

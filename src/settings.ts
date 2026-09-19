@@ -59,6 +59,8 @@ export interface YaaiopSettings {
 	memoryEnabled: boolean;
 	/** Kept memories, in the order they were added. Injected on every message. */
 	memories: Memory[];
+	/** When off, the write tools are never offered and refuse if called. */
+	allowEdits: boolean;
 }
 
 export const DEFAULT_SETTINGS: YaaiopSettings = {
@@ -86,6 +88,9 @@ export const DEFAULT_SETTINGS: YaaiopSettings = {
 	// message, and a feature that quietly costs money should be opted into.
 	memoryEnabled: false,
 	memories: [],
+	// Off by default: the plugin started out read-only, and writing to someone's
+	// notes is something they should switch on knowingly.
+	allowEdits: false,
 };
 
 /**
@@ -220,12 +225,8 @@ export class YaaiopSettingTab extends PluginSettingTab {
 			this.savedPromptsList(),
 			this.memoryGroup(),
 			this.keptMemoriesList(),
+			this.editingGroup(),
 			this.historyGroup(),
-			{
-				name: "Read-only by design",
-				desc: "This plugin can search and read notes, but never creates, edits, or deletes them.",
-				aliases: ["write", "safety", "permissions"],
-			},
 		];
 	}
 
@@ -578,6 +579,27 @@ export class YaaiopSettingTab extends PluginSettingTab {
 		};
 	}
 
+	private editingGroup(): SettingDefinitionItem {
+		return {
+			type: "group",
+			heading: "Editing notes",
+			items: [
+				{
+					name: "Let the assistant edit notes",
+					desc: "For small updates: new notes, a line added or changed, properties. Off, the plugin only reads.",
+					aliases: ["write", "safety", "permissions", "read-only"],
+					control: { type: "toggle", key: "allowEdits" },
+				},
+				{
+					name: "How changes are applied",
+					desc: "Edits to an existing note are written into it as the old text followed by the new, for you to accept, adjust, or reject in the note. New notes and property changes apply right away — ask the assistant to undo a property change. At most two notes per reply, never deletes or renames.",
+					visible: () => this.plugin.settings.allowEdits,
+					searchable: false,
+				},
+			],
+		};
+	}
+
 	private historyGroup(): SettingDefinitionItem {
 		return {
 			type: "group",
@@ -671,6 +693,10 @@ export class YaaiopSettingTab extends PluginSettingTab {
 				return;
 			case "memoryEnabled":
 				settings.memoryEnabled = Boolean(value);
+				await this.persist();
+				return;
+			case "allowEdits":
+				settings.allowEdits = Boolean(value);
 				await this.persist();
 				return;
 

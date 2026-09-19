@@ -12,6 +12,7 @@ import { ChatSession } from "./agent";
 import { SessionStore } from "./store";
 import { SavedPromptModal, SessionHistoryModal } from "./modals";
 import { YaaiopView, VIEW_TYPE_YAAIOP } from "./view";
+import { registerReview } from "./review";
 import {
 	modelInfo,
 	providerInfo,
@@ -79,6 +80,10 @@ export default class YaaiopPlugin extends Plugin {
 				}).open();
 			},
 		});
+
+		// Registered whether or not editing is on: proposals already in a note
+		// must stay reviewable after the setting is switched off.
+		registerReview(this);
 
 		this.addSettingTab(new YaaiopSettingTab(this.app, this));
 	}

@@ -2,7 +2,7 @@
 
 Yet Another AI Obsidian Plugin. Chat with an AI model about your notes, on desktop and on your phone.
 
-The plugin is read-only. It can search and read your vault, but it never creates, edits, or deletes files.
+Out of the box it only reads: it searches and opens your notes, and never changes them. Turn on **Editing notes** and it can also make small updates — a new note, a line added or changed, a property set — with edits to existing notes left in the note for you to review before they count. It never deletes or renames anything.
 
 ## Why it exists
 
@@ -18,6 +18,7 @@ There are already several AI plugins for Obsidian. This one was built around fou
 - Chat panel in the sidebar on desktop, full screen on mobile.
 - The model searches your vault and opens notes on its own, then answers with `[[wikilinks]]` you can tap.
 - Reads images and PDFs, and finds them through the text of the notes that embed them.
+- Optional small edits: new notes, additions and changes you review inside the note itself, and properties.
 - Saved prompts for conversations you start often.
 - Memory: it suggests things worth carrying between chats, you tap the ones to keep. Off by default.
 - Chat history, so you can reopen past conversations. Can be turned off.
@@ -62,6 +63,29 @@ Other commands: **New chat**, **Start chat from saved prompt**, **Open a saved c
 | Anything else | Filename, size, and the notes that reference it |
 
 Attachments are also matched on the text around them, since a filename like `IMG-20260730-WA0071.jpg` says nothing on its own. Images are downscaled before being sent, to keep requests small.
+
+### Editing notes
+
+Off by default. Turn it on in **Settings → Yaaiop → Editing notes**.
+
+It's meant for quick updates from your phone: "add oat milk to the shopping list", "note that the meeting moved to Thursday", "start a note for the Lisbon trip". It is not meant for reorganising your vault: a reply can touch at most two notes, and each change is capped in size.
+
+- **New notes** are created right away. Delete the note if you don't want it.
+- **Properties** are set right away. The model is shown the previous values, so "undo that" works.
+- **Edits and additions to existing notes** are written into the note as a proposal, not applied:
+
+  ```markdown
+  %% yaaiop:old 1 %%
+  - milk
+  %% yaaiop:new 1 %%
+  - milk
+  - oat milk
+  %% yaaiop:end 1 %%
+  ```
+
+  In the editor the old lines are tinted red and the new ones green, with **Accept** and **Keep old** buttons above each change. You can also rewrite the new part before accepting, or delete one part outright: **Accept** keeps whatever is left of the new part (or the old part, if you deleted the new one). **Keep old** does the opposite. To settle every change in a note at once, use the review button in the note's header or the **Accept proposed changes** / **Keep the old version** commands.
+
+While a note has a proposal waiting, the assistant won't propose more in it. On your next message it is told whether you accepted or rejected the changes, so it doesn't assume they went in. The markers are `%%` comments, so they don't show in reading mode, but anything else that reads the file sees them until you decide.
 
 ### Memory
 
@@ -131,13 +155,14 @@ Each request includes your message, the conversation so far, your vault's folder
 
 OpenAI requests are sent with `store: false`, so conversations are not retained on their side for later retrieval. The plugin is stateless with every provider: the full transcript is replayed from your vault on each turn, and no conversation is left parked on a server between messages.
 
+With editing on, notes are written only on your device, through Obsidian's own file API; nothing is written anywhere else.
+
 Smart Connections runs locally, and is only asked for rankings in-process.
 
 ## Roadmap
 
 - Local runtimes (Ollama, LM Studio) as a fifth backend.
 - A free-text model field, so OpenRouter isn't limited to the models in the dropdown.
-- Writing to the vault, behind a confirmation step.
 - Sending the active note or selection as context.
 - Per-prompt model choice.
 - Audio and video via transcription.

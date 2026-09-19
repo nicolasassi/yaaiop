@@ -6,6 +6,8 @@ import { SessionHistoryModal } from "./modals";
 import { deriveTitle, newSessionId, type StoredSession } from "./store";
 import { largestFolder, type ToolCallSummary } from "./vault-tools";
 import { MAX_MEMORIES, extractMemories, newMemory } from "./memory";
+import { isReviewStatus } from "./proposals";
+import { WRITE_TOOL_NAMES } from "./write-tools";
 
 export const VIEW_TYPE_YAAIOP = "yaaiop-chat-view";
 
@@ -221,7 +223,7 @@ export class YaaiopView extends ItemView {
 	private async renderStoredMessages(messages: ChatMessage[]): Promise<void> {
 		for (const message of messages) {
 			const text = message.parts
-				.filter((p): p is TextPart => p.type === "text")
+				.filter((p): p is TextPart => p.type === "text" && !isReviewStatus(p.text))
 				.map((p) => p.text)
 				.join("\n");
 
@@ -242,7 +244,11 @@ export class YaaiopView extends ItemView {
 
 			for (const part of message.parts) {
 				if (part.type === "tool_call") {
-					bubble.addToolCall({ name: part.name, detail: summariseInput(part.input) });
+					bubble.addToolCall(
+						WRITE_TOOL_NAMES.has(part.name) && typeof part.input.path === "string"
+							? { name: part.name, detail: part.input.path, link: part.input.path }
+							: { name: part.name, detail: summariseInput(part.input) },
+					);
 				}
 			}
 
@@ -528,7 +534,12 @@ export class YaaiopView extends ItemView {
 				const icon = row.createSpan({ cls: "yaaiop-tool-icon" });
 				setIcon(icon, TOOL_ICONS[summary.name] ?? "wrench");
 				row.createSpan({ cls: "yaaiop-tool-name", text: summary.name });
-				row.createSpan({ cls: "yaaiop-tool-detail", text: summary.detail });
+				const detail = row.createSpan({ cls: "yaaiop-tool-detail", text: summary.detail });
+				const link = summary.link;
+				if (link) {
+					detail.addClass("yaaiop-tool-link");
+					detail.onclick = () => this.openNote(link);
+				}
 				this.scrollToBottom();
 			},
 
@@ -555,6 +566,13 @@ export class YaaiopView extends ItemView {
 		};
 	}
 
+	/** Opens a note the assistant wrote to, so its proposals can be reviewed. */
+	private openNote(path: string): void {
+		// On a phone the chat covers the note it just opened; get it out of the way.
+		if (Platform.isMobile) this.app.workspace.rightSplit.collapse();
+		void this.app.workspace.openLinkText(path, "", false);
+	}
+
 	private scrollToBottom(): void {
 		this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
 	}
@@ -579,4 +597,8 @@ const TOOL_ICONS: Record<string, string> = {
 	list_notes: "list",
 	recent_notes: "clock",
 	note_links: "link",
+	create_note: "file-plus",
+	edit_note: "file-diff",
+	append_to_note: "list-plus",
+	set_properties: "list",
 };

@@ -442,3 +442,45 @@
   color: var(--text-normal);
   background: var(--background-modifier-hover);
 }
+
+/* Write tools: the target note is tappable so it can be reviewed. */
+.yaaiop-tool-link {
+  color: var(--text-accent);
+  cursor: pointer;
+}
+
+/* Proposed changes inside a note. */
+.yaaiop-review-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--size-4-2);
+  padding: var(--size-4-1) 0;
+}
+
+.yaaiop-review-label {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  margin-right: auto;
+}
+
+/* Tap targets sized for a finger, not a cursor. */
+.yaaiop-review-controls button {
+  min-height: 32px;
+  font-size: var(--font-ui-small);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.yaaiop-review-old {
+  background-color: rgba(var(--color-red-rgb), 0.12);
+  text-decoration: line-through;
+  text-decoration-color: rgba(var(--color-red-rgb), 0.5);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.yaaiop-review-new {
+  background-color: rgba(var(--color-green-rgb), 0.12);
+}
+
+.markdown-source-view.mod-cm6 .cm-line.yaaiop-review-marker {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+}
