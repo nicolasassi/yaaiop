@@ -12,6 +12,14 @@ import type {
 	ToolDefinition,
 	ToolResultPart,
 } from "./types";
+import { partsToText } from "./types";
+
+/**
+ * Models whose policy declines are rerouted server-side (`fallbacks: "default"`).
+ * Kept to models whose default fallback route is documented, since naming one
+ * without a route is a 400 rather than a no-op.
+ */
+const SERVER_FALLBACK_MODELS = new Set(["claude-opus-5"]);
 
 export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	id: "anthropic",
@@ -96,7 +104,9 @@ export class AnthropicProvider implements ChatProvider {
 	): Promise<CompletionResult> {
 		const model = this.info.models.find((m) => m.id === request.model);
 
-		const params: Anthropic.MessageCreateParamsStreaming = {
+		// The beta endpoint is used for every model so there is one code path; it
+		// only differs from the stable one when a beta is actually named below.
+		const params: Anthropic.Beta.Messages.MessageCreateParamsStreaming = {
 			model: request.model,
 			max_tokens: request.maxTokens,
 			system: request.system,
@@ -121,7 +131,15 @@ export class AnthropicProvider implements ChatProvider {
 			params.output_config = { effort: request.effort };
 		}
 
-		const stream = this.sdk().messages.stream(params, { signal });
+		// A policy decline is re-run server-side on a model Anthropic picks for that
+		// refusal category, inside the same stream, instead of ending the turn.
+		// Rate limits and outages are never rerouted — only declines.
+		if (SERVER_FALLBACK_MODELS.has(request.model)) {
+			params.betas = ["server-side-fallback-2026-07-01"];
+			params.fallbacks = "default";
+		}
+
+		const stream = this.sdk().beta.messages.stream(params, { signal });
 
 		for await (const event of stream) {
 			if (event.type !== "content_block_delta") continue;
@@ -141,10 +159,11 @@ export class AnthropicProvider implements ChatProvider {
 	}
 
 	/**
-	 * Forced tool use is how the Messages API guarantees a shape: the model has
-	 * exactly one tool and no choice but to call it, so the arguments it builds
-	 * are the answer. No `thinking` here — utility models are picked for being
-	 * cheap, and the call is not on the user's critical path.
+	 * Structured outputs constrain the reply itself to JSON matching the schema,
+	 * so it parses without a tool round-trip. Forced tool use would do the same
+	 * job but is rejected by some models (Claude Fable 5.1), which this works on.
+	 * No `thinking` here — utility models are picked for being cheap, and the
+	 * call is not on the user's critical path.
 	 */
 	async structuredCompletion(request: StructuredRequest, signal: AbortSignal): Promise<unknown> {
 		const response = await this.sdk().messages.create(
@@ -153,24 +172,29 @@ export class AnthropicProvider implements ChatProvider {
 				max_tokens: request.maxTokens,
 				system: request.system,
 				messages: [{ role: "user", content: request.prompt }],
-				tools: [
-					{
-						name: "respond",
-						description: "Return the result. This is the only way to answer.",
-						input_schema: {
-							type: "object" as const,
+				output_config: {
+					format: {
+						type: "json_schema",
+						schema: {
+							type: "object",
 							properties: request.schema.properties,
-							required: request.schema.required,
+							required: request.schema.required ?? [],
+							additionalProperties: false,
 						},
 					},
-				],
-				tool_choice: { type: "tool", name: "respond" },
+				},
 			},
 			{ signal },
 		);
 
-		const call = response.content.find((block) => block.type === "tool_use");
-		return call ? call.input : null;
+		// A refused or truncated body is a normal outcome, not an error worth
+		// surfacing — the caller treats a null result as "nothing to report".
+		if (response.stop_reason !== "end_turn") return null;
+		try {
+			return JSON.parse(partsToText(fromAnthropicContent(response.content))) as unknown;
+		} catch {
+			return null;
+		}
 	}
 
 	async testConnection(model: string): Promise<void> {
@@ -228,6 +252,8 @@ function toStopReason(reason: string | null): StopReason {
 			return "max_tokens";
 		case "refusal":
 			return "refused";
+		case "model_context_window_exceeded":
+			return "context_full";
 		default:
 			return "end";
 	}
@@ -298,9 +324,21 @@ function isThinkingBlock(
 	return type === "thinking" || type === "redacted_thinking";
 }
 
-function fromAnthropicContent(content: Anthropic.ContentBlock[]): ChatPart[] {
+function fromAnthropicContent(
+	content: Array<Anthropic.ContentBlock | Anthropic.Beta.BetaContentBlock>,
+): ChatPart[] {
+	// After a mid-output fallback, reasoning and tool calls produced before the
+	// last switch point belong to a model that declined: they cannot be replayed
+	// and the calls must not run. Text before it is kept — the fallback model
+	// continued from it. The `fallback` block itself is only an audit marker.
+	let lastFallback = -1;
+	content.forEach((block, i) => {
+		if (block.type === "fallback") lastFallback = i;
+	});
+
 	const parts: ChatPart[] = [];
-	for (const block of content) {
+	for (const [i, block] of content.entries()) {
+		if (i < lastFallback && block.type !== "text") continue;
 		switch (block.type) {
 			case "text":
 				parts.push({ type: "text", text: block.text });

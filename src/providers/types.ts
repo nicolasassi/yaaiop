@@ -158,7 +158,11 @@ export interface StreamCallbacks {
 	onThinking(delta: string): void;
 }
 
-export type StopReason = "end" | "tool_calls" | "max_tokens" | "refused";
+/**
+ * `max_tokens` is the per-reply ceiling from settings; `context_full` means the
+ * conversation itself no longer fits the model's context window.
+ */
+export type StopReason = "end" | "tool_calls" | "max_tokens" | "context_full" | "refused";
 
 export interface CompletionResult {
 	/** Assistant output: text, reasoning, and any tool calls it wants run. */

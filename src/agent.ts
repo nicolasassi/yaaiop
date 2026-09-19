@@ -177,6 +177,8 @@ export class ChatSession {
 			if (result.stopReason !== "tool_calls") {
 				if (result.stopReason === "max_tokens") {
 					handlers.onText("\n\n_[Response hit the token limit — raise it in settings.]_");
+				} else if (result.stopReason === "context_full") {
+					handlers.onText("\n\n_[The conversation no longer fits the model's context — start a new chat.]_");
 				}
 				return;
 			}
