@@ -21,13 +21,20 @@ export const OPENROUTER_PROVIDER: ProviderInfo = {
 	// Strong, multimodal, and an order of magnitude cheaper than the frontier
 	// models below it. OpenRouter exists so people can pick, so the default only
 	// has to be a sensible starting point rather than the most capable option.
-	defaultModel: "google/gemini-3.6-flash",
+	defaultModel: "google/gemini-3.8-flash",
 	utilityModel: "google/gemini-3.5-flash-lite",
 	apiKeyUrl: "https://openrouter.ai/keys",
 	apiKeyPlaceholder: "sk-or-v1-...",
 	// A cross-section of what OpenRouter carries rather than a catalogue: it
 	// serves hundreds of models, and the model picker is a dropdown.
 	models: [
+		{
+			id: "anthropic/claude-fable-5.1",
+			label: "Claude Fable 5.1",
+			supportsReasoning: true,
+			supportsImages: true,
+			supportsDocuments: true,
+		},
 		{
 			id: "anthropic/claude-opus-5",
 			label: "Claude Opus 5",
@@ -50,15 +57,15 @@ export const OPENROUTER_PROVIDER: ProviderInfo = {
 			supportsDocuments: true,
 		},
 		{
-			id: "google/gemini-3.6-flash",
-			label: "Gemini 3.6 Flash (balanced)",
+			id: "google/gemini-3.8-flash",
+			label: "Gemini 3.8 Flash (balanced)",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,
 		},
 		{
-			id: "x-ai/grok-4.5",
-			label: "Grok 4.5",
+			id: "x-ai/grok-4.6",
+			label: "Grok 4.6",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,
@@ -78,10 +85,10 @@ export const OPENROUTER_PROVIDER: ProviderInfo = {
 			supportsDocuments: true,
 		},
 		{
-			id: "deepseek/deepseek-v4-flash-0731",
-			label: "DeepSeek V4 Flash (text only)",
+			id: "deepseek/deepseek-v4.1-flash",
+			label: "DeepSeek V4.1 Flash (no PDFs)",
 			supportsReasoning: true,
-			supportsImages: false,
+			supportsImages: true,
 			supportsDocuments: false,
 		},
 	],

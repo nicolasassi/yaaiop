@@ -24,14 +24,14 @@
   "author": "Nicolas Sassi",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^26.1.2",
-    "esbuild": "^0.28.1",
+    "@types/node": "^26.6.2",
+    "esbuild": "^0.28.2",
     "obsidian": "^1.13.1",
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
-    "@google/genai": "^2.15.0",
-    "openai": "^7.4.0"
+    "@anthropic-ai/sdk": "^0.127.0",
+    "@google/genai": "^2.23.0",
+    "openai": "^7.19.0"
   }
 }

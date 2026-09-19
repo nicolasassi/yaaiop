@@ -102,6 +102,18 @@ interface LegacySettings {
 	maxClaudeMdChars?: number;
 }
 
+/**
+ * Models dropped from a provider's list, mapped to the entry that replaced them.
+ * The old ids mostly still work upstream, but a saved pick that is no longer in
+ * the list leaves the model dropdown showing something other than what is sent.
+ */
+const REPLACED_MODELS: Record<string, string> = {
+	"gemini-3.6-flash": "gemini-3.8-flash",
+	"google/gemini-3.6-flash": "google/gemini-3.8-flash",
+	"x-ai/grok-4.5": "x-ai/grok-4.6",
+	"deepseek/deepseek-v4-flash-0731": "deepseek/deepseek-v4.1-flash",
+};
+
 export function migrateSettings(
 	stored: Partial<YaaiopSettings> & LegacySettings,
 ): Partial<YaaiopSettings> {
@@ -117,6 +129,9 @@ export function migrateSettings(
 	}
 	if (migrated.maxInstructionsChars === undefined && maxClaudeMdChars !== undefined) {
 		migrated.maxInstructionsChars = maxClaudeMdChars;
+	}
+	if (migrated.model !== undefined && migrated.model in REPLACED_MODELS) {
+		migrated.model = REPLACED_MODELS[migrated.model];
 	}
 
 	return migrated;

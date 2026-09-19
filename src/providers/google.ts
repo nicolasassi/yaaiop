@@ -21,7 +21,7 @@ export const GOOGLE_PROVIDER: ProviderInfo = {
 	// The stable Flash rather than the more capable Pro, which is still a preview
 	// model: previews are retired on short notice, and a default that stops
 	// existing is worse than a default that is a step down in capability.
-	defaultModel: "gemini-3.6-flash",
+	defaultModel: "gemini-3.8-flash",
 	utilityModel: "gemini-3.5-flash-lite",
 	apiKeyUrl: "https://aistudio.google.com/apikey",
 	apiKeyPlaceholder: "AIza...",
@@ -34,8 +34,8 @@ export const GOOGLE_PROVIDER: ProviderInfo = {
 			supportsDocuments: true,
 		},
 		{
-			id: "gemini-3.6-flash",
-			label: "Gemini 3.6 Flash (balanced)",
+			id: "gemini-3.8-flash",
+			label: "Gemini 3.8 Flash (balanced)",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,

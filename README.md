@@ -79,9 +79,9 @@ Pick one in **Settings → Yaaiop → Provider**. All four support tool use, ima
 
 | Provider | Models offered | Key from |
 | --- | --- | --- |
-| **Anthropic** | Claude Opus 5, Sonnet 5, Opus 4.8, Haiku 4.5 | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| **Anthropic** | Claude Fable 5.1, Opus 5, Sonnet 5, Opus 4.8, Haiku 4.5 | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 | **OpenAI** | GPT-5.6 Sol, Terra, Luna | [platform.openai.com](https://platform.openai.com/api-keys) |
-| **Google** | Gemini 3.1 Pro, 3.6 Flash, 3.5 Flash-Lite | [aistudio.google.com](https://aistudio.google.com/apikey) |
+| **Google** | Gemini 3.1 Pro, 3.8 Flash, 3.5 Flash-Lite | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | **OpenRouter** | A cross-section: Claude, GPT, Gemini, Grok, Kimi, DeepSeek | [openrouter.ai/keys](https://openrouter.ai/keys) |
 
 **Keys are stored per provider**, so switching back and forth never loses the other ones — but each is entered once per device, like any other key here.
@@ -91,7 +91,7 @@ Pick one in **Settings → Yaaiop → Provider**. All four support tool use, ima
 Provider-specific notes:
 
 - **OpenAI** — **Show reasoning** needs a verified organisation. Without one the plugin falls back to answering without visible reasoning instead of failing the message, and stops asking for the rest of the session.
-- **Google** — the reasoning dial has five steps but Gemini has four, so `xhigh` and `max` both land on Gemini's `high`. Gemini 3.1 Pro is a preview model and may be withdrawn at short notice, which is why the stable 3.6 Flash is the default rather than the more capable Pro.
+- **Google** — the reasoning dial has five steps but Gemini has four, so `xhigh` and `max` both land on Gemini's `high`. Gemini 3.1 Pro is a preview model and may be withdrawn at short notice, which is why the stable 3.8 Flash is the default rather than the more capable Pro.
 - **OpenRouter** — the model list is a cross-section, not a catalogue: OpenRouter carries hundreds of models and the picker is a dropdown. Anything not listed needs an entry adding to `src/providers/openrouter.ts`. Requests carry an `X-Title` attribution header identifying the plugin; nothing about you or your vault is in it.
 
 ### Settings worth knowing

@@ -19,7 +19,7 @@ import { partsToText } from "./types";
  * Kept to models whose default fallback route is documented, since naming one
  * without a route is a 400 rather than a no-op.
  */
-const SERVER_FALLBACK_MODELS = new Set(["claude-opus-5"]);
+const SERVER_FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5"]);
 
 export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	id: "anthropic",
@@ -30,8 +30,15 @@ export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	apiKeyPlaceholder: "sk-ant-...",
 	models: [
 		{
+			id: "claude-fable-5-1",
+			label: "Claude Fable 5.1 (most capable, premium)",
+			supportsReasoning: true,
+			supportsImages: true,
+			supportsDocuments: true,
+		},
+		{
 			id: "claude-opus-5",
-			label: "Claude Opus 5 (most capable)",
+			label: "Claude Opus 5 (recommended)",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,
