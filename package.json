@@ -1,6 +1,6 @@
 {
   "name": "yaaiop",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Yet Another AI Obsidian Plugin — vault-aware AI chat for Obsidian.",
   "main": "main.js",
   "scripts": {
