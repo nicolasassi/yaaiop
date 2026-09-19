@@ -159,9 +159,9 @@ export class OpenAIProvider implements ChatProvider {
 						callbacks.onThinking("\n\n");
 					}
 					break;
-				case "response.reasoning_summary_text.delta":
 				// Models that expose reasoning verbatim rather than as a summary
 				// stream it under a different event; both land in the same panel.
+				case "response.reasoning_summary_text.delta":
 				case "response.reasoning_text.delta":
 					if (request.includeReasoning) callbacks.onThinking(event.delta);
 					break;

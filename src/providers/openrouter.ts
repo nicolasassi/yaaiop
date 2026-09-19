@@ -318,7 +318,7 @@ class ReasoningAccumulator {
 			}
 			for (const [key, value] of Object.entries(detail)) {
 				if (typeof value === "string" && typeof existing[key] === "string" && isTextField(key)) {
-					existing[key] = (existing[key] as string) + value;
+					existing[key] = existing[key] + value;
 				} else if (value !== undefined && value !== null) {
 					existing[key] = value;
 				}

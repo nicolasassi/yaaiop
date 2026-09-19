@@ -87,7 +87,7 @@ export function parseProposals(text: string): ParsedProposals {
 
 		candidates.push({
 			id,
-			startLine: oldLine ?? (newLine as number),
+			startLine: oldLine ?? newLine,
 			endLine,
 			oldLines: oldLine === null ? null : lines.slice(oldLine + 1, newLine ?? endLine),
 			newLines: newLine === null ? null : lines.slice(newLine + 1, endLine),

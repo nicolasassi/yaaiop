@@ -472,8 +472,7 @@
 
 .markdown-source-view.mod-cm6 .cm-line.yaaiop-review-old {
   background-color: rgba(var(--color-red-rgb), 0.12);
-  text-decoration: line-through;
-  text-decoration-color: rgba(var(--color-red-rgb), 0.5);
+  color: var(--text-muted);
 }
 
 .markdown-source-view.mod-cm6 .cm-line.yaaiop-review-new {
