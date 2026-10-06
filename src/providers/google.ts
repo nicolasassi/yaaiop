@@ -1,5 +1,12 @@
-import { FinishReason, GoogleGenAI, ThinkingLevel } from "@google/genai";
-import type { Content, FunctionResponsePart, GenerateContentResponse, Part } from "@google/genai";
+import { FinishReason, GoogleGenAI, ThinkingLevel, ToolType } from "@google/genai";
+import type {
+	Content,
+	FunctionResponsePart,
+	GenerateContentResponse,
+	GroundingMetadata,
+	Part,
+	Tool,
+} from "@google/genai";
 import type {
 	ChatMessage,
 	ChatPart,
@@ -13,6 +20,7 @@ import type {
 	StructuredRequest,
 	ToolDefinition,
 	ToolResultPart,
+	WebSource,
 } from "./types";
 
 export const GOOGLE_PROVIDER: ProviderInfo = {
@@ -109,11 +117,17 @@ export class GoogleProvider implements ChatProvider {
 
 		const stream = await this.sdk().models.generateContentStream({
 			model: request.model,
-			contents: toGeminiContents(request.messages),
+			contents: toGeminiContents(request.messages, request.webAccess),
 			config: {
 				systemInstruction: request.system,
 				maxOutputTokens: request.maxTokens,
-				tools: [{ functionDeclarations: toGeminiTools(request.tools) }],
+				tools: toGeminiToolList(request),
+				// Built-in tools alongside function calling only work when the
+				// server's own calls are returned in the turn, so they can be sent
+				// back with it the way a function call is.
+				...(request.webAccess
+					? { toolConfig: { includeServerSideToolInvocations: true } }
+					: {}),
 				abortSignal: signal,
 				...(model?.supportsReasoning
 					? {
@@ -131,12 +145,14 @@ export class GoogleProvider implements ChatProvider {
 		const accumulator = new PartAccumulator(callbacks, request.includeReasoning);
 		let finishReason: string | undefined;
 		let blockReason: string | undefined;
+		const grounding: GroundingMetadata[] = [];
 
 		for await (const chunk of stream) {
 			blockReason ??= chunk.promptFeedback?.blockReason;
 			const candidate = chunk.candidates?.[0];
 			if (!candidate) continue;
 			finishReason = candidate.finishReason ?? finishReason;
+			if (candidate.groundingMetadata) grounding.push(candidate.groundingMetadata);
 			for (const part of candidate.content?.parts ?? []) {
 				accumulator.add(part);
 			}
@@ -153,6 +169,7 @@ export class GoogleProvider implements ChatProvider {
 			parts: stopReason === "tool_calls" ? parts : parts.filter((p) => p.type !== "tool_call"),
 			stopReason,
 			refusalReason: refusal,
+			sources: groundingSources(grounding),
 		};
 	}
 
@@ -230,6 +247,17 @@ class PartAccumulator {
 	) {}
 
 	add(part: Part): void {
+		// A search or page read the server ran itself. Kept whole — signature
+		// included — because the next turn is rejected if it does not come back.
+		if (part.toolCall || part.toolResponse) {
+			this.parts.push({
+				type: "server_tool",
+				...serverToolLabel(part),
+				raw: part,
+			});
+			return;
+		}
+
 		if (part.functionCall) {
 			const call = part.functionCall;
 			this.parts.push({
@@ -313,6 +341,47 @@ function toStopReason(
 	return "end";
 }
 
+function toGeminiToolList(request: CompletionRequest): Tool[] {
+	const tools: Tool[] = [{ functionDeclarations: toGeminiTools(request.tools) }];
+	// Search to find pages, URL context to read the ones it found or the user
+	// pasted. Both are billed and run by Google; nothing is fetched from here.
+	if (request.webAccess) tools.push({ googleSearch: {} }, { urlContext: {} });
+	return tools;
+}
+
+/** One row per search or page read; the responses to them get none. */
+function serverToolLabel(part: Part): { name: string; detail: string } {
+	const call = part.toolCall;
+	if (!call) return { name: "server_tool_response", detail: "" };
+	const args = call.args ?? {};
+	const list = (value: unknown): string[] =>
+		Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+
+	if (call.toolType === ToolType.GOOGLE_SEARCH_WEB) {
+		const queries = list(args.queries ?? (typeof args.query === "string" ? [args.query] : []));
+		return { name: "web_search", detail: queries.map((q) => `"${q}"`).join(", ") || "Google Search" };
+	}
+	if (call.toolType === ToolType.URL_CONTEXT) {
+		const urls = list(args.urls ?? (typeof args.url === "string" ? [args.url] : []));
+		return { name: "web_fetch", detail: urls.join(", ") || "page" };
+	}
+	return { name: String(call.toolType ?? "server_tool").toLowerCase(), detail: "" };
+}
+
+/**
+ * Pages the answer drew on. Gemini reports them alongside the text rather than
+ * in it, so the text alone would leave the user no way to check a claim.
+ */
+function groundingSources(metadata: GroundingMetadata[]): WebSource[] {
+	const sources: WebSource[] = [];
+	for (const entry of metadata) {
+		for (const chunk of entry.groundingChunks ?? []) {
+			if (chunk.web?.uri) sources.push({ url: chunk.web.uri, title: chunk.web.title });
+		}
+	}
+	return sources;
+}
+
 function toGeminiTools(tools: ToolDefinition[]) {
 	return tools.map((tool) => ({
 		name: tool.name,
@@ -346,7 +415,7 @@ function toResponseParts(part: ToolResultPart): FunctionResponsePart[] | undefin
  * it answers, which the neutral part does not carry, so the name is recovered
  * from the call it belongs to as the history is walked.
  */
-function toGeminiContents(messages: ChatMessage[]): Content[] {
+function toGeminiContents(messages: ChatMessage[], webAccess: boolean): Content[] {
 	const contents: Content[] = [];
 	const toolNames = new Map<string, string>();
 
@@ -389,6 +458,10 @@ function toGeminiContents(messages: ChatMessage[]): Content[] {
 				if (isThoughtPart(part.raw)) parts.push(part.raw);
 			} else if (part.type === "text" && part.text) {
 				parts.push({ text: part.text });
+			} else if (part.type === "server_tool") {
+				// Only while the built-in tools are declared; a server call to a
+				// tool the request no longer offers is dropped with the rest.
+				if (webAccess && isServerToolPart(part.raw)) parts.push(part.raw);
 			} else if (part.type === "tool_call") {
 				toolNames.set(part.id, part.name);
 				parts.push({
@@ -414,6 +487,14 @@ function toGeminiContents(messages: ChatMessage[]): Content[] {
  */
 function isThoughtPart(raw: unknown): raw is Part {
 	return typeof raw === "object" && raw !== null && (raw as Part).thought === true;
+}
+
+function isServerToolPart(raw: unknown): raw is Part {
+	return (
+		typeof raw === "object" &&
+		raw !== null &&
+		((raw as Part).toolCall !== undefined || (raw as Part).toolResponse !== undefined)
+	);
 }
 
 function isSignedPart(raw: unknown): raw is { thoughtSignature: string } {

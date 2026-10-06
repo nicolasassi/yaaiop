@@ -61,6 +61,8 @@ export interface YaaiopSettings {
 	memories: Memory[];
 	/** When off, the write tools are never offered and refuse if called. */
 	allowEdits: boolean;
+	/** When on, the provider's own web search and page fetching are offered. */
+	webAccess: boolean;
 }
 
 export const DEFAULT_SETTINGS: YaaiopSettings = {
@@ -91,6 +93,9 @@ export const DEFAULT_SETTINGS: YaaiopSettings = {
 	// Off by default: the plugin started out read-only, and writing to someone's
 	// notes is something they should switch on knowingly.
 	allowEdits: false,
+	// Off by default: searches are billed on top of tokens, and with it on, what
+	// the user asks about leaves for a search engine as well as the model.
+	webAccess: false,
 };
 
 /**
@@ -226,6 +231,7 @@ export class YaaiopSettingTab extends PluginSettingTab {
 			this.memoryGroup(),
 			this.keptMemoriesList(),
 			this.editingGroup(),
+			this.webGroup(),
 			this.historyGroup(),
 		];
 	}
@@ -600,6 +606,29 @@ export class YaaiopSettingTab extends PluginSettingTab {
 		};
 	}
 
+	private webGroup(): SettingDefinitionItem {
+		const provider = this.provider;
+
+		return {
+			type: "group",
+			heading: "Web access",
+			items: [
+				{
+					name: "Let the assistant search the web",
+					desc: `Uses ${provider.name}'s built-in web search, so no extra key is needed. The assistant decides when to search, and its answer lists the pages it used. Off, it only knows your vault and its training.`,
+					aliases: ["internet", "online", "browse", "lookup", "search engine"],
+					control: { type: "toggle", key: "webAccess" },
+				},
+				{
+					name: "Costs and privacy",
+					desc: "Each search is billed by your provider on top of tokens, and pages it reads count as input. Search queries are written from your question, so they can include things from your notes.",
+					visible: () => this.plugin.settings.webAccess,
+					searchable: false,
+				},
+			],
+		};
+	}
+
 	private historyGroup(): SettingDefinitionItem {
 		return {
 			type: "group",
@@ -700,6 +729,9 @@ export class YaaiopSettingTab extends PluginSettingTab {
 				await this.persist();
 				return;
 
+			case "webAccess":
+				settings.webAccess = Boolean(value);
+				break;
 			case "effort":
 				settings.effort = value as ReasoningEffort;
 				break;

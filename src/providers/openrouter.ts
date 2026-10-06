@@ -11,6 +11,7 @@ import type {
 	StructuredRequest,
 	ToolDefinition,
 	ToolResultPart,
+	WebSource,
 } from "./types";
 
 const BASE_URL = "https://openrouter.ai/api/v1";
@@ -111,15 +112,36 @@ interface ReasoningDetail {
 	[key: string]: unknown;
 }
 
+/**
+ * OpenRouter's own web search, declared next to the function tools. The model
+ * decides when to call it and OpenRouter runs it, so it never comes back as a
+ * tool call; what it found shows up as citations on the answer.
+ */
+interface OpenRouterServerTool {
+	type: "openrouter:web_search";
+	parameters?: { max_results?: number };
+}
+
+/** Results per search. OpenRouter's default; each one past it is billed. */
+const WEB_SEARCH_RESULTS = 5;
+
 /** Fields OpenRouter adds to the OpenAI-shaped request it accepts. */
-type OpenRouterParams = OpenAI.Chat.ChatCompletionCreateParamsStreaming & {
+type OpenRouterParams = Omit<OpenAI.Chat.ChatCompletionCreateParamsStreaming, "tools"> & {
+	tools?: Array<OpenAI.Chat.ChatCompletionTool | OpenRouterServerTool>;
 	reasoning?: { effort?: string; exclude?: boolean };
 };
+
+/** A citation on the answer, as OpenRouter normalises them across vendors. */
+interface UrlCitation {
+	type: "url_citation";
+	url_citation?: { url?: string; title?: string };
+}
 
 /** Fields OpenRouter adds to the OpenAI-shaped chunks it returns. */
 interface OpenRouterDelta {
 	reasoning?: string | null;
 	reasoning_details?: ReasoningDetail[];
+	annotations?: Array<UrlCitation | { type: string }>;
 }
 
 /** Assistant turns carry their reasoning back up alongside the usual fields. */
@@ -179,7 +201,12 @@ export class OpenRouterProvider implements ChatProvider {
 				{ role: "system", content: request.system },
 				...toOpenRouterMessages(request.messages),
 			],
-			tools: toOpenRouterTools(request.tools),
+			tools: [
+				...toOpenRouterTools(request.tools),
+				...(request.webAccess
+					? [{ type: "openrouter:web_search", parameters: { max_results: WEB_SEARCH_RESULTS } } as const]
+					: []),
+			],
 			max_tokens: request.maxTokens,
 			stream: true,
 		};
@@ -190,12 +217,18 @@ export class OpenRouterProvider implements ChatProvider {
 			params.reasoning = { effort: request.effort, exclude: !request.includeReasoning };
 		}
 
-		const stream = await this.sdk().chat.completions.create(params, { signal });
+		// The SDK's own type has no room for OpenRouter's server tools; the wire
+		// format does, and the response comes back in the usual shape either way.
+		const stream = await this.sdk().chat.completions.create(
+			params as OpenAI.Chat.ChatCompletionCreateParamsStreaming,
+			{ signal },
+		);
 
 		let text = "";
 		let reasoning = "";
 		const details = new ReasoningAccumulator();
 		const calls = new ToolCallAccumulator();
+		const sources: WebSource[] = [];
 		let finishReason: string | null = null;
 
 		for await (const chunk of stream) {
@@ -215,6 +248,11 @@ export class OpenRouterProvider implements ChatProvider {
 			}
 			if (delta.reasoning_details) details.add(delta.reasoning_details);
 			if (delta.tool_calls) calls.add(delta.tool_calls);
+			for (const annotation of delta.annotations ?? []) {
+				if (isUrlCitation(annotation) && annotation.url_citation?.url) {
+					sources.push({ url: annotation.url_citation.url, title: annotation.url_citation.title });
+				}
+			}
 		}
 
 		const parts: ChatPart[] = [];
@@ -224,6 +262,16 @@ export class OpenRouterProvider implements ChatProvider {
 		// be replayed, so the part is kept even when there is nothing to show.
 		if (reasoning || collected.length > 0) {
 			parts.push({ type: "thinking", text: reasoning, raw: collected.length > 0 ? collected : undefined });
+		}
+		// The search itself is invisible here; its citations are the only trace,
+		// so they stand in for the row a search would otherwise get.
+		if (sources.length > 0) {
+			const pages = new Set(sources.map((s) => s.url)).size;
+			parts.push({
+				type: "server_tool",
+				name: "web_search",
+				detail: `${pages} page${pages === 1 ? "" : "s"} cited`,
+			});
 		}
 		if (text) parts.push({ type: "text", text });
 		for (const call of calls.finish()) parts.push(call);
@@ -237,6 +285,7 @@ export class OpenRouterProvider implements ChatProvider {
 			parts: stopReason === "tool_calls" ? parts : parts.filter((p) => p.type !== "tool_call"),
 			stopReason,
 			refusalReason: stopReason === "refused" ? (finishReason ?? undefined) : undefined,
+			sources,
 		};
 	}
 
@@ -360,6 +409,10 @@ class ToolCallAccumulator {
 				input: parseArguments(call.args),
 			}));
 	}
+}
+
+function isUrlCitation(annotation: { type: string }): annotation is UrlCitation {
+	return annotation.type === "url_citation";
 }
 
 function toStopReason(finishReason: string | null, parts: ChatPart[]): StopReason {

@@ -69,7 +69,28 @@ export interface ToolResultPart {
 	media?: MediaAttachment[];
 }
 
-export type ChatPart = TextPart | ThinkingPart | ToolCallPart | ToolResultPart;
+/**
+ * A step the provider ran on its own servers in the middle of a turn — a web
+ * search, a page fetch — rather than handing back to us as a tool call.
+ *
+ * Nothing on our side executes it. It is kept so the UI can show what happened
+ * and so the adapter that produced it can replay it: most providers need the
+ * call and its result sent back with the turn, or the model loses what it read.
+ */
+export interface ServerToolPart {
+	type: "server_tool";
+	/** Neutral name for display, e.g. "web_search" or "web_fetch". */
+	name: string;
+	/** What it was run on — a query or a URL. Empty for steps not worth a row. */
+	detail: string;
+	/**
+	 * The provider's original block, kept verbatim. Same contract as
+	 * `ThinkingPart.raw`: opaque, and only replayed by the adapter that made it.
+	 */
+	raw?: unknown;
+}
+
+export type ChatPart = TextPart | ThinkingPart | ToolCallPart | ToolResultPart | ServerToolPart;
 
 export interface ChatMessage {
 	role: ChatRole;
@@ -138,6 +159,11 @@ export interface CompletionRequest {
 	effort: ReasoningEffort;
 	/** When false, adapters should ask the provider not to return reasoning text. */
 	includeReasoning: boolean;
+	/**
+	 * Offer the provider's own web search (and page fetching, where it has one).
+	 * These run server-side, so they never appear in `tools` or as tool calls.
+	 */
+	webAccess: boolean;
 }
 
 /**
@@ -160,9 +186,17 @@ export interface StreamCallbacks {
 
 /**
  * `max_tokens` is the per-reply ceiling from settings; `context_full` means the
- * conversation itself no longer fits the model's context window.
+ * conversation itself no longer fits the model's context window. `paused` means
+ * the provider stopped a long server-side step (a run of web searches) partway
+ * and expects the turn so far to be sent back so it can carry on.
  */
-export type StopReason = "end" | "tool_calls" | "max_tokens" | "context_full" | "refused";
+export type StopReason = "end" | "tool_calls" | "paused" | "max_tokens" | "context_full" | "refused";
+
+/** A web page the model drew on, for listing under the answer. */
+export interface WebSource {
+	url: string;
+	title?: string;
+}
 
 export interface CompletionResult {
 	/** Assistant output: text, reasoning, and any tool calls it wants run. */
@@ -170,6 +204,8 @@ export interface CompletionResult {
 	stopReason: StopReason;
 	/** Set when stopReason is "refused", if the provider explains why. */
 	refusalReason?: string;
+	/** Web pages cited in this response, when web access was used. */
+	sources?: WebSource[];
 }
 
 /**

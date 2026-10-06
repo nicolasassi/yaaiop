@@ -19,6 +19,7 @@ There are already several AI plugins for Obsidian. This one was built around fou
 - The model searches your vault and opens notes on its own, then answers with `[[wikilinks]]` you can tap.
 - Reads images and PDFs, and finds them through the text of the notes that embed them.
 - Optional small edits: new notes, additions and changes you review inside the note itself, and properties.
+- Optional web access through your provider's built-in search, with the pages it used listed under the answer. Off by default.
 - Saved prompts for conversations you start often.
 - Memory: it suggests things worth carrying between chats, you tap the ones to keep. Off by default.
 - Chat history, so you can reopen past conversations. Can be turned off.
@@ -97,6 +98,25 @@ Kept memories work like the instructions file — added to the system prompt on 
 
 **It costs tokens on every call**, which is why it ships off: memories are re-sent with every message, and each reply triggers one extra request. They live in the plugin's `data.json` with your other settings, never in your notes.
 
+### Web access
+
+Off by default. Turn it on in **Settings → Yaaiop → Web access**.
+
+With it on, the assistant can search the web and read pages when your vault doesn't have the answer — current events, documentation, facts — or when you ask it to look something up. It uses your provider's own search, so there's no extra key:
+
+| Provider | What it uses |
+| --- | --- |
+| **Anthropic** | `web_search` and `web_fetch` server tools, up to 5 searches and 5 page reads per request |
+| **OpenAI** | The hosted `web_search` tool, which can search and open pages |
+| **Google** | Grounding with Google Search, plus URL context to read pages |
+| **OpenRouter** | The `openrouter:web_search` server tool, 5 results per search |
+
+Each search shows up as a row in the chat, the same way vault searches do, and any page the answer relied on but didn't link inline is listed under it as **Sources**.
+
+**It costs more than tokens.** Searches are billed per use by your provider, and the pages read count as input tokens. Search queries are written from your question, so they can contain things from your notes.
+
+The model is told to treat page content as untrusted: it shouldn't follow instructions it finds on a page, and it shouldn't edit notes because a page told it to. With editing on as well, you still review every change to an existing note before it counts.
+
 ### Providers
 
 Pick one in **Settings → Yaaiop → Provider**. All four support tool use, images, PDFs, and reasoning, so the plugin behaves the same whichever you choose.
@@ -148,6 +168,8 @@ The plugin sends requests to the API of the provider you configure, and to nothi
 | OpenRouter | `https://openrouter.ai/api/v1/chat/completions` |
 
 With OpenRouter, your request is then forwarded to whichever upstream vendor serves the model you picked, so their terms apply as well as OpenRouter's.
+
+With **Web access** on, searches and page reads are run by your provider on its own servers, not from your device, and the queries go to whatever search engine that provider uses.
 
 Requests happen when you send a message, when you press **Test connection**, and — if memory is enabled — once after each reply, to work out what to suggest remembering.
 

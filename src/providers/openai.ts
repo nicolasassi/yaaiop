@@ -11,6 +11,7 @@ import type {
 	StructuredRequest,
 	ToolDefinition,
 	ToolResultPart,
+	WebSource,
 } from "./types";
 
 export const OPENAI_PROVIDER: ProviderInfo = {
@@ -100,7 +101,12 @@ export class OpenAIProvider implements ChatProvider {
 			model: request.model,
 			instructions: request.system,
 			input: toOpenAIInput(request.messages),
-			tools: toOpenAITools(request.tools),
+			// Hosted search: OpenAI runs it inside the response, and it can open and
+			// read pages as well as search, so there is no separate fetch tool.
+			tools: [
+				...toOpenAITools(request.tools),
+				...(request.webAccess ? [{ type: "web_search" as const }] : []),
+			],
 			max_output_tokens: request.maxTokens,
 			// Nothing is kept on OpenAI's servers: the transcript lives in the vault
 			// and is replayed in full each turn. That is also what makes
@@ -183,6 +189,7 @@ export class OpenAIProvider implements ChatProvider {
 			parts: stopReason === "tool_calls" ? parts : parts.filter((p) => p.type !== "tool_call"),
 			stopReason,
 			refusalReason: refusal ?? undefined,
+			sources: citedSources(response.output),
 		};
 	}
 
@@ -266,6 +273,40 @@ function findRefusal(output: OpenAI.Responses.ResponseOutputItem[]): string | nu
 		}
 	}
 	return null;
+}
+
+/** Pages the answer cites, from the annotations on its text. */
+function citedSources(output: OpenAI.Responses.ResponseOutputItem[]): WebSource[] {
+	const sources: WebSource[] = [];
+	for (const item of output) {
+		if (item.type !== "message") continue;
+		for (const block of item.content) {
+			if (block.type !== "output_text") continue;
+			for (const annotation of block.annotations) {
+				if (annotation.type === "url_citation") {
+					sources.push({ url: annotation.url, title: annotation.title });
+				}
+			}
+		}
+	}
+	return sources;
+}
+
+/** What a hosted search step did, for its row in the chat. */
+function webSearchDetail(item: OpenAI.Responses.ResponseFunctionWebSearch): string {
+	const action = item.action;
+	switch (action.type) {
+		case "search": {
+			const queries = action.queries?.length ? action.queries : action.query ? [action.query] : [];
+			return queries.map((q) => `"${q}"`).join(", ");
+		}
+		case "open_page":
+			return action.url ?? "";
+		case "find_in_page":
+			return `"${action.pattern}" in ${action.url}`;
+		default:
+			return "";
+	}
 }
 
 function toStopReason(
@@ -375,6 +416,10 @@ function toOpenAIInput(messages: ChatMessage[]): OpenAI.Responses.ResponseInput 
 					name: part.name,
 					arguments: JSON.stringify(part.input),
 				});
+			} else if (part.type === "server_tool" && isWebSearchCall(part.raw)) {
+				// Replayed in place: a reasoning item has to be followed by the item
+				// it led to, and dropping the search would orphan it.
+				input.push(part.raw);
 			}
 		}
 	}
@@ -392,6 +437,14 @@ function isReasoningItem(raw: unknown): raw is OpenAI.Responses.ResponseReasonin
 		typeof raw === "object" &&
 		raw !== null &&
 		(raw as { type?: unknown }).type === "reasoning"
+	);
+}
+
+function isWebSearchCall(raw: unknown): raw is OpenAI.Responses.ResponseFunctionWebSearch {
+	return (
+		typeof raw === "object" &&
+		raw !== null &&
+		(raw as { type?: unknown }).type === "web_search_call"
 	);
 }
 
@@ -417,6 +470,14 @@ function fromOpenAIOutput(output: OpenAI.Responses.ResponseOutputItem[]): ChatPa
 				for (const block of item.content) {
 					if (block.type === "output_text") parts.push({ type: "text", text: block.text });
 				}
+				break;
+			case "web_search_call":
+				parts.push({
+					type: "server_tool",
+					name: item.action.type === "search" ? "web_search" : "web_fetch",
+					detail: webSearchDetail(item),
+					raw: item,
+				});
 				break;
 			case "function_call":
 				parts.push({

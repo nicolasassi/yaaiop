@@ -11,6 +11,7 @@ import type {
 	StructuredRequest,
 	ToolDefinition,
 	ToolResultPart,
+	WebSource,
 } from "./types";
 import { partsToText } from "./types";
 
@@ -20,6 +21,20 @@ import { partsToText } from "./types";
  * without a route is a 400 rather than a no-op.
  */
 const SERVER_FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5"]);
+
+/**
+ * Models documented for the dynamic-filtering web tools, which trim search
+ * results and fetched pages down before they reach the context. Everything else
+ * gets the basic versions, which every model in the list accepts.
+ */
+const DYNAMIC_WEB_TOOL_MODELS = new Set(["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8"]);
+
+/**
+ * Per request, not per turn. Enough for a search, a follow-up, and reading a few
+ * of the results; a runaway loop stops here instead of on the user's bill.
+ */
+const MAX_WEB_SEARCHES = 5;
+const MAX_WEB_FETCHES = 5;
 
 export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	id: "anthropic",
@@ -117,8 +132,11 @@ export class AnthropicProvider implements ChatProvider {
 			model: request.model,
 			max_tokens: request.maxTokens,
 			system: request.system,
-			messages: toAnthropicMessages(request.messages),
-			tools: toAnthropicTools(request.tools),
+			messages: toAnthropicMessages(request.messages, request.webAccess),
+			tools: [
+				...toAnthropicTools(request.tools),
+				...(request.webAccess ? webTools(request.model) : []),
+			],
 			// Auto-caches the last cacheable block, so each turn re-reads the
 			// system prompt and prior history from cache instead of paying full
 			// price. Tool results are large; this matters.
@@ -162,6 +180,7 @@ export class AnthropicProvider implements ChatProvider {
 			parts: fromAnthropicContent(message.content),
 			stopReason: toStopReason(message.stop_reason),
 			refusalReason: message.stop_details?.category ?? undefined,
+			sources: citedSources(message.content),
 		};
 	}
 
@@ -255,6 +274,9 @@ function toStopReason(reason: string | null): StopReason {
 	switch (reason) {
 		case "tool_use":
 			return "tool_calls";
+		// The server-side search loop hit its iteration limit mid-turn.
+		case "pause_turn":
+			return "paused";
 		case "max_tokens":
 			return "max_tokens";
 		case "refusal":
@@ -264,6 +286,25 @@ function toStopReason(reason: string | null): StopReason {
 		default:
 			return "end";
 	}
+}
+
+/**
+ * Search and fetch run on Anthropic's side; the model calls them like any tool
+ * but the results come back inside the same response. Fetch only opens URLs
+ * already in the conversation — typed by the user or found by a search — so it
+ * cannot be steered to an address the model made up.
+ */
+function webTools(model: string): Anthropic.Beta.BetaToolUnion[] {
+	if (DYNAMIC_WEB_TOOL_MODELS.has(model)) {
+		return [
+			{ type: "web_search_20260209", name: "web_search", max_uses: MAX_WEB_SEARCHES },
+			{ type: "web_fetch_20260209", name: "web_fetch", max_uses: MAX_WEB_FETCHES },
+		];
+	}
+	return [
+		{ type: "web_search_20250305", name: "web_search", max_uses: MAX_WEB_SEARCHES },
+		{ type: "web_fetch_20250910", name: "web_fetch", max_uses: MAX_WEB_FETCHES },
+	];
 }
 
 function toAnthropicTools(tools: ToolDefinition[]): Anthropic.Tool[] {
@@ -278,7 +319,12 @@ function toAnthropicTools(tools: ToolDefinition[]): Anthropic.Tool[] {
 	}));
 }
 
-function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] {
+/**
+ * `webAccess` gates replaying earlier searches: with the web tools switched off
+ * they are no longer declared, and a call to an undeclared tool is rejected.
+ * The answer text they led to is kept either way.
+ */
+function toAnthropicMessages(messages: ChatMessage[], webAccess: boolean): Anthropic.MessageParam[] {
 	return messages.map((message) => {
 		if (message.role === "user") {
 			const content: Anthropic.ContentBlockParam[] = [];
@@ -312,6 +358,10 @@ function toAnthropicMessages(messages: ChatMessage[]): Anthropic.MessageParam[] 
 				content.push({ type: "text", text: part.text });
 			} else if (part.type === "tool_call") {
 				content.push({ type: "tool_use", id: part.id, name: part.name, input: part.input });
+			} else if (part.type === "server_tool" && webAccess && isServerBlock(part.raw)) {
+				// The call and its result, encrypted page content included, go back
+				// as they came — the model otherwise forgets what it read mid-turn.
+				content.push(part.raw);
 			}
 		}
 		return { role: "assistant", content };
@@ -331,6 +381,42 @@ function isThinkingBlock(
 	return type === "thinking" || type === "redacted_thinking";
 }
 
+/**
+ * Blocks from a server-side tool: the `server_tool_use` call, and a result block
+ * whose type ends in `_tool_result`. A client `tool_result` never appears in an
+ * assistant turn, so the suffix alone does not catch one.
+ */
+function isServerBlock(raw: unknown): raw is Anthropic.ContentBlockParam {
+	if (typeof raw !== "object" || raw === null) return false;
+	const type = (raw as { type?: unknown }).type;
+	return (
+		typeof type === "string" &&
+		(type === "server_tool_use" || (type.endsWith("_tool_result") && type !== "tool_result"))
+	);
+}
+
+/** One row per search or fetch; the internal steps behind them get none. */
+function serverToolDetail(block: { name: string; input: unknown }): string {
+	const input = (block.input ?? {}) as Record<string, unknown>;
+	if (block.name === "web_search" && typeof input.query === "string") return `"${input.query}"`;
+	if (block.name === "web_fetch" && typeof input.url === "string") return input.url;
+	return "";
+}
+
+/** Pages the answer cites. Claude attaches them to text blocks, not the text. */
+function citedSources(content: Array<Anthropic.ContentBlock | Anthropic.Beta.BetaContentBlock>): WebSource[] {
+	const sources: WebSource[] = [];
+	for (const block of content) {
+		if (block.type !== "text" || !block.citations) continue;
+		for (const citation of block.citations) {
+			if (citation.type === "web_search_result_location") {
+				sources.push({ url: citation.url, title: citation.title ?? undefined });
+			}
+		}
+	}
+	return sources;
+}
+
 function fromAnthropicContent(
 	content: Array<Anthropic.ContentBlock | Anthropic.Beta.BetaContentBlock>,
 ): ChatPart[] {
@@ -347,8 +433,22 @@ function fromAnthropicContent(
 	for (const [i, block] of content.entries()) {
 		if (i < lastFallback && block.type !== "text") continue;
 		switch (block.type) {
-			case "text":
-				parts.push({ type: "text", text: block.text });
+			case "text": {
+				// A cited answer arrives as many short text blocks, one per claim.
+				// They are one piece of prose, streamed without separators, so they
+				// are stored as one — joined with nothing, exactly as they streamed.
+				const last = parts[parts.length - 1];
+				if (last?.type === "text") last.text += block.text;
+				else parts.push({ type: "text", text: block.text });
+				break;
+			}
+			case "server_tool_use":
+				parts.push({
+					type: "server_tool",
+					name: block.name,
+					detail: serverToolDetail(block),
+					raw: block,
+				});
 				break;
 			case "thinking":
 				parts.push({ type: "thinking", text: block.thinking, raw: block });
@@ -366,6 +466,9 @@ function fromAnthropicContent(
 				});
 				break;
 			default:
+				if (isServerBlock(block)) {
+					parts.push({ type: "server_tool", name: block.type, detail: "", raw: block });
+				}
 				break;
 		}
 	}

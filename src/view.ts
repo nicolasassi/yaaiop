@@ -249,6 +249,8 @@ export class YaaiopView extends ItemView {
 							? { name: part.name, detail: part.input.path, link: part.input.path }
 							: { name: part.name, detail: summariseInput(part.input) },
 					);
+				} else if (part.type === "server_tool" && part.detail) {
+					bubble.addToolCall({ name: part.name, detail: part.detail });
 				}
 			}
 
@@ -592,6 +594,8 @@ function summariseInput(input: unknown): string {
 }
 
 const TOOL_ICONS: Record<string, string> = {
+	web_search: "globe",
+	web_fetch: "link",
 	search_vault: "search",
 	read_note: "file-text",
 	list_notes: "list",
