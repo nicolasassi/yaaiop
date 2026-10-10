@@ -42,8 +42,12 @@ export function newMemory(text: string): Memory {
  * instructions, CLAUDE.md, extra instructions) stays byte-identical when a
  * memory is added and only the tail of the cached prefix is invalidated.
  */
+export function memoryTexts(memories: Memory[]): string[] {
+	return memories.map((m) => m.text.trim()).filter(Boolean);
+}
+
 export function memoriesSection(memories: Memory[]): string | null {
-	const lines = memories.map((m) => m.text.trim()).filter(Boolean);
+	const lines = memoryTexts(memories);
 	if (lines.length === 0) return null;
 
 	return [
@@ -53,6 +57,23 @@ export function memoriesSection(memories: Memory[]): string | null {
 		"",
 		"They can go stale. If a note contradicts one, trust the note and say so.",
 	].join("\n");
+}
+
+export const MEMORY_UPDATE_TAG = "<memory_update>";
+
+/** Memories the user kept mid-chat, sent ahead of their next message. */
+export function memoryUpdate(lines: string[]): string {
+	return [
+		MEMORY_UPDATE_TAG,
+		"The user just kept these, to add to the things they want you to know going forward:",
+		...lines.map((line) => `- ${line}`),
+		"</memory_update>",
+	].join("\n");
+}
+
+/** True for text the plugin added to a user turn, which the transcript hides. */
+export function isMemoryUpdate(text: string): boolean {
+	return text.startsWith(MEMORY_UPDATE_TAG);
 }
 
 const EXTRACT_SYSTEM = [

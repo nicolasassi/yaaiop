@@ -5,7 +5,7 @@ import { modelInfo, providerInfo, type ChatMessage, type TextPart, type Thinking
 import { SessionHistoryModal } from "./modals";
 import { deriveTitle, newSessionId, type StoredSession } from "./store";
 import { largestFolder, type ToolCallSummary } from "./vault-tools";
-import { MAX_MEMORIES, extractMemories, newMemory } from "./memory";
+import { MAX_MEMORIES, extractMemories, isMemoryUpdate, newMemory } from "./memory";
 import { isReviewStatus } from "./proposals";
 import { WRITE_TOOL_NAMES } from "./write-tools";
 
@@ -206,7 +206,7 @@ export class YaaiopView extends ItemView {
 	openSession(stored: StoredSession): void {
 		this.controller?.abort();
 		this.clearMemorySuggestions();
-		this.session.restore(stored.messages);
+		this.session.restore(stored.messages, stored.context);
 		this.sessionId = stored.id;
 		this.sessionCreatedAt = stored.createdAt;
 
@@ -223,7 +223,7 @@ export class YaaiopView extends ItemView {
 	private async renderStoredMessages(messages: ChatMessage[]): Promise<void> {
 		for (const message of messages) {
 			const text = message.parts
-				.filter((p): p is TextPart => p.type === "text" && !isReviewStatus(p.text))
+				.filter((p): p is TextPart => p.type === "text" && !isReviewStatus(p.text) && !isMemoryUpdate(p.text))
 				.map((p) => p.text)
 				.join("\n");
 
@@ -272,6 +272,7 @@ export class YaaiopView extends ItemView {
 				providerId: this.plugin.settings.providerId,
 				model: this.plugin.settings.model,
 				messages,
+				context: this.session.getContext() ?? undefined,
 			},
 			this.plugin.settings.maxStoredSessions,
 		);

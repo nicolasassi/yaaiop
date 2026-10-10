@@ -20,14 +20,33 @@ import { partsToText } from "./types";
  * Kept to models whose default fallback route is documented, since naming one
  * without a route is a 400 rather than a no-op.
  */
-const SERVER_FALLBACK_MODELS = new Set(["claude-fable-5-1", "claude-opus-5"]);
+const SERVER_FALLBACK_MODELS = new Set([
+	"claude-fable-5-1",
+	"claude-opus-5-5",
+	"claude-opus-5",
+	"claude-sonnet-5-5",
+]);
+
+/**
+ * Models that sign each thinking block against the conversation before it and
+ * reject a replay whose history changed since. They are told to drop such a
+ * block instead of failing the request; the turn then runs without that
+ * reasoning rather than not at all.
+ */
+const BOUND_THINKING_MODELS = new Set(["claude-fable-5-1", "claude-opus-5-5", "claude-sonnet-5-5"]);
 
 /**
  * Models documented for the dynamic-filtering web tools, which trim search
  * results and fetched pages down before they reach the context. Everything else
  * gets the basic versions, which every model in the list accepts.
  */
-const DYNAMIC_WEB_TOOL_MODELS = new Set(["claude-opus-5", "claude-sonnet-5", "claude-opus-4-8"]);
+const DYNAMIC_WEB_TOOL_MODELS = new Set([
+	"claude-opus-5-5",
+	"claude-opus-5",
+	"claude-sonnet-5-5",
+	"claude-sonnet-5",
+	"claude-opus-4-8",
+]);
 
 /**
  * Per request, not per turn. Enough for a search, a follow-up, and reading a few
@@ -39,7 +58,7 @@ const MAX_WEB_FETCHES = 5;
 export const ANTHROPIC_PROVIDER: ProviderInfo = {
 	id: "anthropic",
 	name: "Anthropic (Claude)",
-	defaultModel: "claude-opus-5",
+	defaultModel: "claude-opus-5-5",
 	utilityModel: "claude-haiku-4-5",
 	apiKeyUrl: "https://console.anthropic.com/settings/keys",
 	apiKeyPlaceholder: "sk-ant-...",
@@ -52,15 +71,29 @@ export const ANTHROPIC_PROVIDER: ProviderInfo = {
 			supportsDocuments: true,
 		},
 		{
+			id: "claude-opus-5-5",
+			label: "Claude Opus 5.5 (recommended)",
+			supportsReasoning: true,
+			supportsImages: true,
+			supportsDocuments: true,
+		},
+		{
+			id: "claude-sonnet-5-5",
+			label: "Claude Sonnet 5.5 (balanced)",
+			supportsReasoning: true,
+			supportsImages: true,
+			supportsDocuments: true,
+		},
+		{
 			id: "claude-opus-5",
-			label: "Claude Opus 5 (recommended)",
+			label: "Claude Opus 5",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,
 		},
 		{
 			id: "claude-sonnet-5",
-			label: "Claude Sonnet 5 (balanced)",
+			label: "Claude Sonnet 5",
 			supportsReasoning: true,
 			supportsImages: true,
 			supportsDocuments: true,
@@ -146,6 +179,8 @@ export class AnthropicProvider implements ChatProvider {
 
 		// Older models reject `thinking` and `output_config` outright, so they are
 		// only sent for models that advertise reasoning support.
+		const betas: Anthropic.Beta.AnthropicBeta[] = [];
+
 		if (model?.supportsReasoning) {
 			params.thinking = {
 				type: "adaptive",
@@ -154,16 +189,57 @@ export class AnthropicProvider implements ChatProvider {
 				display: request.includeReasoning ? "summarized" : "omitted",
 			};
 			params.output_config = { effort: request.effort };
+
+			// The session keeps history append-only, but a chat saved by an older
+			// version, or one whose model changed midway, can still carry blocks
+			// the API no longer accepts. Dropping them beats a 400.
+			if (BOUND_THINKING_MODELS.has(request.model)) {
+				params.thinking.block_binding = { prefix_mismatch_behavior: "drop_block" };
+				betas.push("thinking-binding-controls-2026-08-01");
+			}
 		}
 
 		// A policy decline is re-run server-side on a model Anthropic picks for that
 		// refusal category, inside the same stream, instead of ending the turn.
 		// Rate limits and outages are never rerouted — only declines.
 		if (SERVER_FALLBACK_MODELS.has(request.model)) {
-			params.betas = ["server-side-fallback-2026-07-01"];
+			betas.push("server-side-fallback-2026-07-01");
 			params.fallbacks = "default";
 		}
 
+		if (betas.length > 0) params.betas = betas;
+
+		let message: Anthropic.Beta.BetaMessage;
+		try {
+			message = await this.stream(params, request, callbacks, signal);
+		} catch (err) {
+			// Models without the drop option reject a stale reasoning block outright.
+			// The 400 arrives before any output has streamed, so the turn can be
+			// re-sent once without reasoning and the user sees only the answer.
+			if (!isThinkingSignatureError(err)) throw err;
+			console.warn("[yaaiop] replayed reasoning was rejected; retrying without it.", err);
+			message = await this.stream(
+				{ ...params, messages: withoutThinking(params.messages) },
+				request,
+				callbacks,
+				signal,
+			);
+		}
+
+		return {
+			parts: fromAnthropicContent(message.content),
+			stopReason: toStopReason(message.stop_reason),
+			refusalReason: message.stop_details?.category ?? undefined,
+			sources: citedSources(message.content),
+		};
+	}
+
+	private async stream(
+		params: Anthropic.Beta.Messages.MessageCreateParamsStreaming,
+		request: CompletionRequest,
+		callbacks: StreamCallbacks,
+		signal: AbortSignal,
+	): Promise<Anthropic.Beta.BetaMessage> {
 		const stream = this.sdk().beta.messages.stream(params, { signal });
 
 		for await (const event of stream) {
@@ -175,13 +251,7 @@ export class AnthropicProvider implements ChatProvider {
 			}
 		}
 
-		const message = await stream.finalMessage();
-		return {
-			parts: fromAnthropicContent(message.content),
-			stopReason: toStopReason(message.stop_reason),
-			refusalReason: message.stop_details?.category ?? undefined,
-			sources: citedSources(message.content),
-		};
+		return stream.finalMessage();
 	}
 
 	/**
@@ -343,21 +413,24 @@ function toAnthropicMessages(messages: ChatMessage[], webAccess: boolean): Anthr
 			return { role: "user", content };
 		}
 
+		// Each thinking block is signed against everything before it, so the turn
+		// goes back exactly as the API produced it: same blocks, same order, the
+		// stored originals rather than anything rebuilt from the parts. Reasoning
+		// without a signature is dropped rather than reconstructed, and blocks
+		// saved by another provider are shaped differently and are skipped.
 		const content: Anthropic.ContentBlockParam[] = [];
-		// Reasoning must lead the assistant turn and be replayed exactly as the
-		// API produced it — signature included — so the stored original is used
-		// and anything without one is dropped rather than reconstructed.
-		// Blocks saved by another provider are shaped differently and are skipped.
 		for (const part of message.parts) {
-			if (part.type === "thinking" && isThinkingBlock(part.raw)) {
-				content.push(part.raw);
-			}
-		}
-		for (const part of message.parts) {
-			if (part.type === "text" && part.text) {
-				content.push({ type: "text", text: part.text });
+			if (part.type === "thinking") {
+				if (isThinkingBlock(part.raw)) content.push(part.raw);
+			} else if (part.type === "text") {
+				if (isTextBlocks(part.raw)) content.push(...part.raw);
+				else if (part.text) content.push({ type: "text", text: part.text });
 			} else if (part.type === "tool_call") {
-				content.push({ type: "tool_use", id: part.id, name: part.name, input: part.input });
+				content.push(
+					isToolUseBlock(part.raw, part.id)
+						? part.raw
+						: { type: "tool_use", id: part.id, name: part.name, input: part.input },
+				);
 			} else if (part.type === "server_tool" && webAccess && isServerBlock(part.raw)) {
 				// The call and its result, encrypted page content included, go back
 				// as they came — the model otherwise forgets what it read mid-turn.
@@ -379,6 +452,57 @@ function isThinkingBlock(
 	if (typeof raw !== "object" || raw === null) return false;
 	const type = (raw as { type?: unknown }).type;
 	return type === "thinking" || type === "redacted_thinking";
+}
+
+/** The original text blocks behind a text part, when this adapter made it. */
+function isTextBlocks(raw: unknown): raw is Anthropic.TextBlockParam[] {
+	return (
+		Array.isArray(raw) &&
+		raw.length > 0 &&
+		raw.every(
+			(block) =>
+				typeof block === "object" &&
+				block !== null &&
+				(block as { type?: unknown }).type === "text" &&
+				typeof (block as { text?: unknown }).text === "string",
+		)
+	);
+}
+
+/** The original `tool_use` block behind a tool call, when this adapter made it. */
+function isToolUseBlock(raw: unknown, id: string): raw is Anthropic.ToolUseBlockParam {
+	if (typeof raw !== "object" || raw === null) return false;
+	const block = raw as { type?: unknown; id?: unknown };
+	return block.type === "tool_use" && block.id === id;
+}
+
+/**
+ * The 400 for a reasoning block the API will not accept back: bound to a
+ * different conversation, or a signature it cannot verify. Both read
+ * "Invalid `signature` in `thinking` block".
+ */
+function isThinkingSignatureError(err: unknown): boolean {
+	return (
+		err instanceof Anthropic.BadRequestError &&
+		/signature/i.test(err.message) &&
+		/thinking/i.test(err.message)
+	);
+}
+
+/** History with every reasoning block removed; text and tool calls stay. */
+function withoutThinking(
+	messages: Anthropic.Beta.BetaMessageParam[],
+): Anthropic.Beta.BetaMessageParam[] {
+	return messages.map((message) =>
+		message.role === "assistant" && Array.isArray(message.content)
+			? {
+					...message,
+					content: message.content.filter(
+						(block) => block.type !== "thinking" && block.type !== "redacted_thinking",
+					),
+				}
+			: message,
+	);
 }
 
 /**
@@ -436,10 +560,15 @@ function fromAnthropicContent(
 			case "text": {
 				// A cited answer arrives as many short text blocks, one per claim.
 				// They are one piece of prose, streamed without separators, so they
-				// are stored as one — joined with nothing, exactly as they streamed.
+				// are shown as one — joined with nothing, exactly as they streamed —
+				// while the blocks themselves are kept for replay, citations included.
 				const last = parts[parts.length - 1];
-				if (last?.type === "text") last.text += block.text;
-				else parts.push({ type: "text", text: block.text });
+				if (last?.type === "text" && Array.isArray(last.raw)) {
+					last.text += block.text;
+					last.raw.push(block);
+				} else {
+					parts.push({ type: "text", text: block.text, raw: [block] });
+				}
 				break;
 			}
 			case "server_tool_use":
@@ -463,6 +592,7 @@ function fromAnthropicContent(
 					id: block.id,
 					name: block.name,
 					input: (block.input ?? {}) as Record<string, unknown>,
+					raw: block,
 				});
 				break;
 			default:

@@ -12,6 +12,15 @@ export type ChatRole = "user" | "assistant";
 export interface TextPart {
 	type: "text";
 	text: string;
+	/**
+	 * The provider's original blocks this text was joined from, kept verbatim.
+	 *
+	 * Same contract as `ThinkingPart.raw`: providers that sign reasoning against
+	 * the conversation before it (Anthropic) reject a later turn if an earlier
+	 * one comes back reshaped, so the adapter replays these instead of `text`.
+	 * Treat as opaque.
+	 */
+	raw?: unknown[];
 }
 
 export interface ThinkingPart {

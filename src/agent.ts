@@ -8,7 +8,7 @@ import {
 	type ToolCallSummary,
 } from "./vault-tools";
 import type { YaaiopSettings } from "./settings";
-import { memoriesSection } from "./memory";
+import { memoriesSection, memoryTexts, memoryUpdate } from "./memory";
 import { MAX_NOTES_PER_TURN, WRITE_TOOLS, WriteTurn } from "./write-tools";
 import { REVIEW_STATUS_TAG, hasProposals, takeOutcome } from "./proposals";
 import {
@@ -28,6 +28,27 @@ export interface StreamHandlers {
 
 /** Safety net so a confused tool loop can't spin forever on the user's bill. */
 const MAX_TOOL_ROUNDS = 12;
+
+/**
+ * What the model was given when a chat began, fixed for the life of the chat
+ * and saved with it.
+ *
+ * Providers that sign reasoning (Anthropic) bind each block to the system
+ * prompt and tool list it was produced under, so rebuilding either between
+ * turns — a new note changing the vault counts, the date rolling over, an
+ * edited CLAUDE.md, a toggled setting — invalidates the chat's reasoning and
+ * its prompt cache. Settings changed mid-chat apply from the next chat, with
+ * two exceptions that only ever narrow what the model can do: write tools are
+ * refused at run time once editing is off, and web access turned off is
+ * dropped at once.
+ */
+export interface SessionContext {
+	system: string;
+	allowEdits: boolean;
+	webAccess: boolean;
+	/** Memory texts the model has been given, in the system prompt or since. */
+	memories: string[];
+}
 
 async function buildSystemPrompt(
 	app: App,
@@ -94,9 +115,9 @@ async function buildSystemPrompt(
 		sections.push(`The user's own notes on their vault conventions:\n${extra}`);
 	}
 
-	// Memories go last on purpose. This is the only section that changes as the
-	// user taps a suggestion mid-conversation, so keeping it at the tail means a
-	// new memory invalidates the end of the cached prefix rather than all of it.
+	// Memories go last: they are the section most likely to differ between two
+	// chats, so the prefix shared across chats stays as long as possible. One
+	// kept mid-chat is sent with the next message instead (see `send`).
 	if (settings.memoryEnabled) {
 		const memories = memoriesSection(settings.memories);
 		if (memories) sections.push(memories);
@@ -166,6 +187,7 @@ function hostname(url: string): string {
  */
 export class ChatSession {
 	private messages: ChatMessage[] = [];
+	private context: SessionContext | null = null;
 	/** Notes this chat left proposals in, not yet reported back to the model. */
 	private awaitingReview = new Set<string>();
 
@@ -179,6 +201,7 @@ export class ChatSession {
 
 	reset(): void {
 		this.messages = [];
+		this.context = null;
 		this.awaitingReview.clear();
 	}
 
@@ -191,13 +214,20 @@ export class ChatSession {
 		return this.messages;
 	}
 
+	/** Snapshot for persistence, alongside the messages it was sent with. */
+	getContext(): SessionContext | null {
+		return this.context;
+	}
+
 	/**
-	 * Restores a saved conversation so the next turn continues it. Parts are
-	 * replayed exactly as stored, which is what lets providers that require
-	 * byte-identical reasoning blocks pick the conversation back up.
+	 * Restores a saved conversation so the next turn continues it. Parts and the
+	 * context are replayed exactly as stored, which is what lets providers that
+	 * require byte-identical reasoning blocks pick the conversation back up.
+	 * Chats saved before contexts were kept get a fresh one on the next turn.
 	 */
-	restore(messages: ChatMessage[]): void {
+	restore(messages: ChatMessage[], context?: SessionContext): void {
 		this.messages = messages;
+		this.context = context ?? null;
 		this.awaitingReview.clear();
 	}
 
@@ -209,23 +239,27 @@ export class ChatSession {
 		const settings = this.getSettings();
 		const provider = this.provider();
 		const model = modelInfo(provider.info, settings.model);
-		// Built once per user turn, not per tool round: project instructions are
-		// read through Obsidian's cache, but re-reading them mid-loop could change
-		// the prompt prefix between rounds and cost us the cache hit.
-		const system = await buildSystemPrompt(this.app, settings, this.semanticAvailable());
+		const context = await this.contextFor(settings);
 
+		const parts: ChatPart[] = [];
 		// A proposal tool returns before the user has looked at it, so the model
 		// otherwise never learns whether its text went in.
 		const review = await this.reviewStatus();
-		this.messages.push({
-			role: "user",
-			parts: review
-				? [{ type: "text", text: review }, { type: "text", text: userText }]
-				: [{ type: "text", text: userText }],
-		});
+		if (review) parts.push({ type: "text", text: review });
+		// Memories kept during this chat arrive with the next message rather than
+		// in the system prompt, which stays as it was when the chat began.
+		const kept = settings.memoryEnabled
+			? memoryTexts(settings.memories).filter((m) => !context.memories.includes(m))
+			: [];
+		if (kept.length > 0) {
+			parts.push({ type: "text", text: memoryUpdate(kept) });
+			context.memories.push(...kept);
+		}
+		parts.push({ type: "text", text: userText });
+		this.messages.push({ role: "user", parts });
 
 		const turn = new WriteTurn();
-		const tools = settings.allowEdits ? [...VAULT_TOOLS, ...WRITE_TOOLS] : VAULT_TOOLS;
+		const tools = context.allowEdits ? [...VAULT_TOOLS, ...WRITE_TOOLS] : VAULT_TOOLS;
 		const sources: WebSource[] = [];
 		const turnStart = this.messages.length;
 		let paused = false;
@@ -234,13 +268,13 @@ export class ChatSession {
 			const result = await provider.streamCompletion(
 				{
 					model: settings.model,
-					system,
+					system: context.system,
 					messages: this.messages,
 					tools,
 					maxTokens: settings.maxTokens,
 					effort: settings.effort,
 					includeReasoning: settings.showThinking && model.supportsReasoning,
-					webAccess: settings.webAccess,
+					webAccess: context.webAccess,
 				},
 				handlers,
 				signal,
@@ -307,6 +341,24 @@ export class ChatSession {
 		handlers.onText(
 			`\n\n_[Stopped after ${MAX_TOOL_ROUNDS} tool rounds without a final answer.]_`,
 		);
+	}
+
+	/**
+	 * The chat's context, built on its first turn. Web access switched off since
+	 * is honoured now — those tools run on the provider's side, out of reach of
+	 * the run-time check write tools get — and stays off for the rest of the chat.
+	 */
+	private async contextFor(settings: YaaiopSettings): Promise<SessionContext> {
+		if (!this.context) {
+			this.context = {
+				system: await buildSystemPrompt(this.app, settings, this.semanticAvailable()),
+				allowEdits: settings.allowEdits,
+				webAccess: settings.webAccess,
+				memories: settings.memoryEnabled ? memoryTexts(settings.memories) : [],
+			};
+		}
+		if (this.context.webAccess && !settings.webAccess) this.context.webAccess = false;
+		return this.context;
 	}
 
 	/**

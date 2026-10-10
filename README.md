@@ -123,7 +123,7 @@ Pick one in **Settings → Yaaiop → Provider**. All four support tool use, ima
 
 | Provider | Models offered | Key from |
 | --- | --- | --- |
-| **Anthropic** | Claude Fable 5.1, Opus 5, Sonnet 5, Opus 4.8, Haiku 4.5 | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
+| **Anthropic** | Claude Fable 5.1, Opus 5.5, Sonnet 5.5, Opus 5, Sonnet 5, Opus 4.8, Haiku 4.5 | [console.anthropic.com](https://console.anthropic.com/settings/keys) |
 | **OpenAI** | GPT-5.6 Sol, Terra, Luna | [platform.openai.com](https://platform.openai.com/api-keys) |
 | **Google** | Gemini 3.1 Pro, 3.8 Flash, 3.5 Flash-Lite | [aistudio.google.com](https://aistudio.google.com/apikey) |
 | **OpenRouter** | A cross-section: Claude, GPT, Gemini, Grok, Kimi, DeepSeek | [openrouter.ai/keys](https://openrouter.ai/keys) |

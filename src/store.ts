@@ -1,4 +1,6 @@
 import type { App, PluginManifest } from "obsidian";
+import type { SessionContext } from "./agent";
+import { isMemoryUpdate } from "./memory";
 import type { ChatMessage, TextPart } from "./providers";
 import { isReviewStatus } from "./proposals";
 
@@ -11,6 +13,8 @@ export interface StoredSession {
 	providerId: string;
 	model: string;
 	messages: ChatMessage[];
+	/** Absent on chats saved by older versions; rebuilt on their next turn. */
+	context?: SessionContext;
 }
 
 /**
@@ -43,7 +47,7 @@ export function deriveTitle(messages: ChatMessage[]): string {
 	for (const message of messages) {
 		if (message.role !== "user") continue;
 		const text = message.parts
-			.filter((p): p is TextPart => p.type === "text" && !isReviewStatus(p.text))
+			.filter((p): p is TextPart => p.type === "text" && !isReviewStatus(p.text) && !isMemoryUpdate(p.text))
 			.map((p) => p.text)
 			.join(" ");
 		const trimmed = text.trim().replace(/\s+/g, " ");
